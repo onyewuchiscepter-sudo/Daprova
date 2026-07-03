@@ -10,6 +10,13 @@ export type SeedQuestion = {
 export type SeedArea = { name: string; description?: string; questions: SeedQuestion[] };
 export type SeedTemplate = { category: string; name: string; areas: SeedArea[] };
 
+// Compact constructor for a single question — used by the five templates
+// below to keep 300 real (non-abbreviated) MCQs readable without the
+// boilerplate of a full object literal per question.
+function q(text: string, a: string, b: string, c: string, d: string, correct: 'a' | 'b' | 'c' | 'd', type: 'pre' | 'post'): SeedQuestion {
+  return { text, a, b, c, d, correct, type };
+}
+
 // Digital Skills — fully seeded per FR-M1-02 (5 areas x 12 questions/area, split
 // 6 "pre" + 6 "post" so pre/post assessments draw parallel, non-identical item sets).
 const digitalSkills: SeedTemplate = {
@@ -104,107 +111,469 @@ const digitalSkills: SeedTemplate = {
   ],
 };
 
-// Stub templates — minimal placeholder content (2 areas x 4 questions/area) so
-// the template-selection and multi-area UI flow works end-to-end. Flagged for
-// real content later; not FR-M1-02 compliant (min. 5 areas x 12 Q) by design,
-// per the agreed MVP scope (Digital Skills is the only fully-seeded template).
-function stub(category: string, name: string, areas: Array<[string, string, string, string, string]>): SeedTemplate {
-  return {
-    category,
-    name,
-    areas: areas.map(([areaName, q1, q2, q3, q4]) => ({
-      name: areaName,
-      questions: [q1, q2, q3, q4].map((line, i) => {
-        const [text, a, b, c, d, correct] = line.split('|');
-        return { text, a, b, c, d, correct: correct as 'a' | 'b' | 'c' | 'd', type: i < 2 ? 'pre' : 'post' } as SeedQuestion;
-      }),
-    })),
-  };
-}
+// Financial Literacy — fully seeded per FR-M1-02 (5 areas x 12 questions/area).
+const financialLiteracy: SeedTemplate = {
+  category: 'financial_literacy',
+  name: 'Financial Literacy',
+  areas: [
+    {
+      name: 'Budgeting Basics',
+      questions: [
+        q('What is a budget?', 'A list of debts', 'A plan for how you will spend and save money', 'A bank statement', 'A loan agreement', 'b', 'pre'),
+        q('Why is tracking expenses useful?', 'It has no benefit', 'It helps you see where your money goes', 'It increases your income automatically', 'It replaces saving', 'b', 'pre'),
+        q('What is the "50/30/20" budgeting rule primarily used for?', 'Splitting income into needs, wants, and savings', 'Calculating loan interest', 'Filing taxes', 'Setting stock prices', 'a', 'pre'),
+        q('What is disposable income?', 'Money you must throw away', 'Income remaining after taxes and essential deductions', 'Money kept only in cash', 'Income from investments only', 'b', 'pre'),
+        q('Why should a budget be reviewed regularly?', 'It never needs changes', 'Income and expenses change over time', "It's required by law", 'It only matters once a year', 'b', 'pre'),
+        q('What is a common cause of budget failure?', 'Tracking expenses too closely', 'Not accounting for irregular or unexpected expenses', 'Saving too much', 'Reviewing it too often', 'b', 'pre'),
+        q('What is a fixed expense?', 'An expense that changes every month', 'A regular expense that stays the same each period, like rent', 'A one-time gift', 'Money you save', 'b', 'post'),
+        q('What happens if your expenses exceed your income?', 'You save more', 'You go into deficit/debt', 'Nothing changes', 'Your income increases', 'b', 'post'),
+        q('What is a variable expense?', 'An expense that stays exactly the same every month', 'An expense that changes month to month, like groceries or transport', 'A type of savings account', 'A government tax', 'b', 'post'),
+        q('What is the purpose of a "sinking fund" in budgeting?', 'To lose money intentionally', 'To save gradually for a specific future expense', 'To take on more debt', 'To pay only credit card minimums', 'b', 'post'),
+        q('Which action best helps someone stick to a budget?', 'Avoiding tracking spending', 'Reviewing spending regularly and adjusting', 'Ignoring due dates for bills', 'Spending first, planning later', 'b', 'post'),
+        q('What is "lifestyle inflation"?', 'Prices rising due to government policy', 'Spending increasing as income increases, often reducing savings', 'A type of loan', 'A tax deduction', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Savings & Banking',
+      questions: [
+        q('What is the purpose of a savings account?', 'To spend money quickly', 'To set aside money safely while it may earn interest', 'To avoid using banks', 'To pay bills only', 'b', 'pre'),
+        q('What is interest, in the context of savings?', 'A fee you always pay', 'Money earned on your saved balance over time', 'A type of loan', "A bank's logo", 'b', 'pre'),
+        q('What is the difference between a savings account and a current/checking account?', 'There is no difference', 'Savings accounts are designed for storing money and earning interest, current accounts for frequent transactions', 'Current accounts always pay higher interest', "Savings accounts can't be accessed at all", 'b', 'pre'),
+        q('What is a bank statement?', 'A rule set by the bank', 'A record of transactions in your account over a period', 'A loan agreement', 'A tax form', 'b', 'pre'),
+        q('Why might someone use mobile/agent banking?', "It's slower than visiting a branch", 'It offers convenient access to banking services without visiting a branch', 'It has no security', 'It is only for businesses', 'b', 'pre'),
+        q('What is a PIN used for in banking?', 'To open a bank account only', 'To authenticate and protect access to an account or card', 'To calculate interest', 'To sign a loan contract', 'b', 'pre'),
+        q('What is an emergency fund?', 'Money set aside for unexpected expenses', 'A type of loan', 'A monthly subscription', 'A tax payment', 'a', 'post'),
+        q('Why is comparing bank fees important before opening an account?', 'It is not important', 'Different accounts may have different costs that affect your savings', 'All banks charge the same fees always', 'Fees only apply to loans', 'b', 'post'),
+        q('What does "compound interest" mean?', 'Interest calculated only once', 'Interest earned on both the principal and previously earned interest', 'A penalty fee', 'A type of tax', 'b', 'post'),
+        q('What is a key benefit of automating savings (e.g., automatic transfers)?', 'It guarantees higher interest rates', 'It helps ensure consistent saving without relying on willpower', 'It removes the need for a bank account', 'It eliminates all fees', 'b', 'post'),
+        q('What should you check before trusting a savings or investment offer?', 'Nothing, just deposit money', 'Whether it is regulated/licensed and the returns are realistic', 'Only how attractive the advertisement looks', 'Only what friends say', 'b', 'post'),
+        q('What is a savings goal?', 'A random amount saved with no plan', 'A specific target amount saved for a defined purpose or timeframe', 'A type of loan repayment', "A bank's minimum balance requirement", 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Debt & Credit Management',
+      questions: [
+        q('What is debt?', 'Money you have saved', 'Money you owe to another person or institution', 'Money you have donated', 'A type of insurance', 'b', 'pre'),
+        q("What is a loan's \"interest rate\"?", 'The amount you must repay every day', 'The cost of borrowing money, usually expressed as a percentage', 'A fee for closing an account', 'A type of tax', 'b', 'pre'),
+        q('What is collateral in a loan agreement?', 'A type of interest rate', 'An asset pledged to secure a loan, which the lender can claim if you default', 'A monthly fee', 'A government subsidy', 'b', 'pre'),
+        q('What is a credit score generally used for?', 'Setting your salary', 'Assessing how likely you are to repay borrowed money', 'Determining your tax rate', 'Choosing your nationality', 'b', 'pre'),
+        q('Why is it risky to borrow money without a repayment plan?', "It's not risky", 'You may struggle to repay, leading to penalties or worsening debt', 'Lenders will pay you extra', 'It always improves your credit score', 'b', 'pre'),
+        q('What is the danger of only making minimum payments on a loan or credit card?', 'There is no danger', 'Interest continues to accumulate, extending the debt and increasing total cost', 'It pays off the debt faster', 'It removes all interest', 'b', 'pre'),
+        q('What does it mean to "default" on a loan?', 'Successfully repaying a loan early', 'Failing to repay a loan according to the agreed terms', 'Applying for a new loan', 'Refinancing at a lower rate', 'b', 'post'),
+        q('What is debt consolidation?', 'Taking on more separate loans', 'Combining multiple debts into a single loan, often for simpler repayment', 'Refusing to repay any debt', 'A type of savings account', 'b', 'post'),
+        q('Why do informal/unregulated moneylenders often pose higher risk to borrowers?', 'They never charge interest', 'They may charge excessive interest and lack legal protections for the borrower', 'They are always cheaper than banks', 'They require no repayment', 'b', 'post'),
+        q('What is a grace period on a loan or credit card?', 'A time when no repayment is ever required', 'A set period after the due date during which a payment can be made without penalty', 'A fee added for late payment', 'An extra interest charge', 'b', 'post'),
+        q('Why is it important to read a loan agreement before signing?', 'It is not important', 'It ensures you understand the interest rate, fees, and repayment terms', 'Agreements never contain important details', 'Only lenders need to read it', 'b', 'post'),
+        q('What is a healthy approach when facing overwhelming debt?', 'Ignore all communication from lenders', 'Seek advice, prioritize repayments, and communicate with lenders', 'Take on more high-interest loans to cover it', 'Avoid budgeting entirely', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Insurance & Risk Basics',
+      questions: [
+        q('What is the basic purpose of insurance?', 'To guarantee profit', 'To protect against financial loss from unexpected events', 'To avoid paying taxes', 'To increase your income directly', 'b', 'pre'),
+        q('What is an insurance "premium"?', 'The payout after a claim', 'The regular payment made to keep an insurance policy active', 'A type of loan', 'A government tax', 'b', 'pre'),
+        q('What is a common type of insurance for health-related costs?', 'Life insurance', 'Health insurance', 'Car insurance', 'Property insurance', 'b', 'pre'),
+        q('What does "risk" mean in a financial context?', 'A guaranteed profit', 'The possibility of losing money or value due to uncertain events', 'A fixed savings return', 'A type of loan repayment', 'b', 'pre'),
+        q('Why might someone choose to have insurance despite the cost?', 'It has no benefit', 'It reduces the financial impact of unexpected events like illness or accidents', 'It always increases your income', 'It replaces the need for savings entirely', 'b', 'pre'),
+        q('What is an insurance "claim"?', 'A request for a loan', 'A formal request to the insurer for payment after a covered loss', 'A type of premium', 'A tax refund', 'b', 'pre'),
+        q('What is a deductible/excess in an insurance policy?', 'The full payout amount', 'The amount the policyholder must pay out of pocket before insurance coverage applies', 'A discount on the premium', 'A type of interest rate', 'b', 'post'),
+        q('Why is it important to read the terms of an insurance policy?', 'It is not important', "To understand what is and isn't covered before you need to make a claim", 'Terms never affect payouts', 'Only the insurer needs to know the terms', 'b', 'post'),
+        q('What is the main difference between life insurance and health insurance?', 'There is no difference', 'Life insurance provides for beneficiaries after death; health insurance covers medical costs', 'Life insurance only covers cars', 'Health insurance is always free', 'b', 'post'),
+        q('What is a common risk of not having any insurance?', 'Guaranteed savings growth', 'Facing the full financial burden of unexpected events like illness, accidents, or loss', 'Lower taxes', 'Automatic loan forgiveness', 'b', 'post'),
+        q('What does "underwriting" refer to in insurance?', 'Signing a loan document', 'The process an insurer uses to assess risk and decide coverage/premium', 'A type of claim', 'A savings strategy', 'b', 'post'),
+        q('Why might community or group insurance schemes be useful in low-income settings?', 'They are always more expensive', 'They can pool risk and reduce individual costs, increasing access to coverage', 'They provide no benefits', 'They eliminate the need for premiums', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Financial Planning & Goal Setting',
+      questions: [
+        q('What is a financial goal?', 'A random spending habit', 'A specific target related to saving, spending, or investing money', 'A type of loan', "A bank's operating hours", 'b', 'pre'),
+        q('Why is it useful to set short-term and long-term financial goals separately?', "It's not useful", 'They often require different saving strategies and timeframes', 'Long-term goals never matter', 'Short-term goals require no planning', 'b', 'pre'),
+        q('What does "net worth" mean?', 'Total income only', 'The value of what you own (assets) minus what you owe (liabilities)', 'Your monthly salary', 'A type of tax', 'b', 'pre'),
+        q('What is an asset in personal finance?', 'Something you owe', 'Something of value that you own, like savings or property', 'A type of debt', 'A monthly bill', 'b', 'pre'),
+        q('What is a liability in personal finance?', 'Something you own', 'Something you owe, like a loan or credit card balance', 'A savings goal', 'An income source', 'b', 'pre'),
+        q('Why is it helpful to write down financial goals?', 'It has no effect', 'It clarifies priorities and helps track progress', 'It guarantees achieving them instantly', 'It replaces the need for a budget', 'b', 'pre'),
+        q('What is the benefit of setting a SMART financial goal (Specific, Measurable, Achievable, Relevant, Time-bound)?', 'It has no benefit', 'It makes the goal clearer and easier to plan and track', 'It guarantees the goal will be met without effort', 'It only applies to businesses', 'b', 'post'),
+        q('Why should financial goals be revisited periodically?', 'They never change', 'Circumstances like income or priorities can change over time', "It's required by law", 'It has no purpose', 'b', 'post'),
+        q('What is diversification in the context of financial planning?', 'Putting all your money in one place', 'Spreading money across different savings or investment options to manage risk', 'Avoiding all forms of saving', 'A type of loan', 'b', 'post'),
+        q('Why is it important to plan for retirement early, even with a small amount?', 'It has no impact due to compounding over time', 'Starting early allows savings to grow over a longer period, often benefiting from compound interest', 'Retirement planning only matters after age 60', 'It guarantees a fixed income regardless of contributions', 'b', 'post'),
+        q('What is opportunity cost in financial decision-making?', 'The interest earned on a loan', 'The value of the next best alternative given up when making a choice', 'A bank fee', 'A tax deduction', 'b', 'post'),
+        q('Why might someone consult a financial advisor or use financial planning tools?', 'It guarantees becoming wealthy', 'To get structured guidance on budgeting, saving, and investing based on their goals', 'It replaces the need for any personal decisions', 'It is only useful for large corporations', 'b', 'post'),
+      ],
+    },
+  ],
+};
 
-const financialLiteracy = stub('financial_literacy', 'Financial Literacy', [
-  [
-    'Budgeting Basics',
-    'What is a budget?|A list of debts|A plan for how you will spend and save money|A bank statement|A loan agreement|b',
-    'Why is tracking expenses useful?|It has no benefit|It helps you see where your money goes|It increases your income automatically|It replaces saving|b',
-    'What is a fixed expense?|An expense that changes every month|A regular expense that stays the same each period, like rent|A one-time gift|Money you save|b',
-    'What happens if your expenses exceed your income?|You save more|You go into deficit/debt|Nothing changes|Your income increases|b',
+// Coding & Web Dev — fully seeded per FR-M1-02.
+const coding: SeedTemplate = {
+  category: 'coding',
+  name: 'Coding & Web Dev',
+  areas: [
+    {
+      name: 'Programming Fundamentals',
+      questions: [
+        q('What is a variable in programming?', 'A fixed value that never changes', 'A named storage location for a value that can change', 'A type of computer virus', 'A printer setting', 'b', 'pre'),
+        q('What does a "loop" allow a program to do?', 'Run a block of code repeatedly', 'Delete files', 'Connect to Wi-Fi', 'Change the screen resolution', 'a', 'pre'),
+        q('What is an "algorithm"?', 'A type of computer hardware', 'A step-by-step set of instructions to solve a problem or complete a task', 'A programming language', 'A type of file format', 'b', 'pre'),
+        q('What does it mean for code to have a "syntax error"?', 'The code runs perfectly', "The code violates the rules of the programming language's grammar", 'The code is too slow', 'The code uses too much memory', 'b', 'pre'),
+        q('What is a "data type" (e.g., number, string, boolean)?', 'A type of computer virus', 'A classification that defines what kind of value a variable can hold and what operations can be performed on it', 'A network protocol', 'A file extension', 'b', 'pre'),
+        q('What is the purpose of comments in code?', 'To make the program run faster', 'To explain code to humans; they are ignored by the program when it runs', 'To fix bugs automatically', 'To encrypt the code', 'b', 'pre'),
+        q('What is the purpose of an "if statement"?', 'To repeat code forever', 'To execute code conditionally based on a test', 'To store a password', 'To connect to a database', 'b', 'post'),
+        q('What is a function in programming?', 'A reusable block of code that performs a task', 'A type of hardware', 'An internet browser', 'A file format', 'a', 'post'),
+        q('What is "debugging"?', 'Writing new features only', 'The process of finding and fixing errors in code', 'Deleting all code and starting over', 'Installing new software', 'b', 'post'),
+        q('What does an "array" (or list) allow you to do?', 'Store a single value only', 'Store an ordered collection of multiple values', 'Connect to the internet', 'Encrypt data', 'b', 'post'),
+        q('What is the difference between "==" and "=" in many programming languages?', 'There is no difference', '"=" assigns a value, while "==" compares two values for equality', '"==" assigns a value, while "=" compares values', 'Both always mean the same thing in every language', 'b', 'post'),
+        q('Why is it good practice to give variables and functions clear, descriptive names?', 'It has no real benefit', 'It makes code easier to read, understand, and maintain', 'It makes the program run faster automatically', 'It is required for the code to compile', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Web Basics',
+      questions: [
+        q('What does HTML stand for?', 'HyperText Markup Language', 'High Tech Modern Language', 'Home Tool Markup Language', 'Hyperlink and Text Machine Language', 'a', 'pre'),
+        q('What is the role of CSS in a webpage?', 'Storing data in a database', 'Styling the appearance of a webpage', 'Running server logic', 'Sending emails', 'b', 'pre'),
+        q('What is an HTML "tag"?', 'A type of image file', 'A markup element used to define the structure of content, like <p> or <div>', 'A CSS property', 'A server command', 'b', 'pre'),
+        q('What is the purpose of the <img> tag in HTML?', 'To create a hyperlink', 'To embed an image in a webpage', 'To style text', 'To create a table', 'b', 'pre'),
+        q('What is a hyperlink?', 'A type of image', 'A clickable element that navigates to another page or resource', 'A CSS style rule', 'A type of database', 'b', 'pre'),
+        q('What does "responsive design" mean for a website?', 'A website that only works on desktops', 'A website that adapts its layout to different screen sizes and devices', 'A website with no images', 'A website that loads slowly on purpose', 'b', 'pre'),
+        q('What does a web browser do when you enter a URL?', 'Deletes your history', 'Requests and displays the webpage from a server', 'Formats your hard drive', 'Sends an email', 'b', 'post'),
+        q('What is the purpose of JavaScript on a webpage?', 'To style text only', 'To add interactivity and dynamic behavior', 'To store files permanently', 'To print documents', 'b', 'post'),
+        q('What does "HTTP" stand for and relate to?', 'A programming language', 'HyperText Transfer Protocol, used to transfer data between a browser and a server', 'A type of database', 'A file compression format', 'b', 'post'),
+        q('What is the Document Object Model (DOM)?', 'A type of server', 'A programming interface representing the structure of a webpage that JavaScript can interact with', 'A CSS framework', 'A network cable standard', 'b', 'post'),
+        q('Why is it recommended to separate HTML (structure), CSS (style), and JavaScript (behavior)?', 'It has no benefit', 'It makes websites easier to maintain, read, and update', 'It makes websites load slower on purpose', 'It is required for a browser to work at all', 'b', 'post'),
+        q('What is a "form" used for on a webpage?', 'Displaying static images only', 'Collecting input from users, like text or selections', 'Styling page layout', 'Compressing files', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Version Control & Collaboration',
+      questions: [
+        q('What is version control used for?', 'Deleting old files permanently', 'Tracking changes to code over time and enabling collaboration', 'Compressing image files', 'Designing webpage layouts', 'b', 'pre'),
+        q('What is Git?', 'A programming language', 'A distributed version control system for tracking changes in code', 'A web hosting service', 'A type of database', 'b', 'pre'),
+        q('What is a "repository" (repo) in version control?', 'A single line of code', "A storage location containing a project's files and their history", 'A type of error message', 'A web browser extension', 'b', 'pre'),
+        q('What does "commit" mean in Git?', 'Deleting a file permanently', "Saving a snapshot of changes to the repository's history", 'Uploading a virus', 'Formatting a hard drive', 'b', 'pre'),
+        q('What is the purpose of a "commit message"?', 'To encrypt the code', 'To describe what changes were made and why', "To set the file's permissions", 'To change the programming language', 'b', 'pre'),
+        q('What does it mean to "clone" a repository?', 'To delete a repository', 'To create a local copy of a remote repository', 'To rename a file', 'To compress a project', 'b', 'pre'),
+        q('What is a "branch" in Git used for?', 'Deleting the main project', 'Working on changes separately from the main codebase before merging them', 'Compressing files', 'Sending emails', 'b', 'post'),
+        q('What does "merge" mean in version control?', 'Deleting a branch without saving it', 'Combining changes from different branches into one', 'Encrypting a repository', 'Formatting code automatically', 'b', 'post'),
+        q('What is a "merge conflict"?', 'A successful merge with no issues', 'A situation where changes from different branches overlap and must be manually resolved', 'A type of virus', 'A network connection error', 'b', 'post'),
+        q('What is the purpose of platforms like GitHub or GitLab?', 'Only for storing personal photos', 'Hosting Git repositories and enabling collaboration, code review, and issue tracking', 'Only for sending emails', 'Compressing videos', 'b', 'post'),
+        q('Why is collaborating via version control better than emailing code files back and forth?', "It isn't better", "It tracks history, avoids overwriting others' work, and simplifies merging changes", 'It requires no internet connection', 'It automatically writes all the code for you', 'b', 'post'),
+        q('What is a "pull request" (or merge request)?', 'A request to delete a repository', 'A proposal to merge changes from one branch into another, often reviewed before merging', 'A request for a refund', 'A type of software license', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Databases & Data Handling',
+      questions: [
+        q('What is a database used for?', 'Displaying webpage styles', 'Storing, organizing, and retrieving structured data', 'Compressing images', 'Sending emails', 'b', 'pre'),
+        q('What is a "table" in a relational database?', 'A type of chart', 'A structured collection of data organized into rows and columns', 'A programming loop', 'A web page layout', 'b', 'pre'),
+        q('What does SQL stand for?', 'Structured Query Language', 'System Quality Level', 'Standard Question List', 'Software Quality Logic', 'a', 'pre'),
+        q('What is a "row" (or record) in a database table?', 'A column heading', 'A single entry containing data for all columns in that table', 'A type of index', 'A database backup', 'b', 'pre'),
+        q('What is the purpose of a "primary key" in a database table?', 'To style the table', 'To uniquely identify each row in a table', 'To encrypt the database', 'To connect to the internet', 'b', 'pre'),
+        q('What is the difference between a database and a spreadsheet, generally?', 'There is no difference', 'Databases are typically built for larger, structured data with more robust querying and multi-user access', 'Spreadsheets always store more data than databases', 'Databases cannot store numbers', 'b', 'pre'),
+        q('What does a basic SQL "SELECT" statement do?', 'Deletes data from a table', 'Retrieves data from one or more tables', 'Creates a new database', "Changes a table's structure permanently", 'b', 'post'),
+        q('What is the purpose of a "WHERE" clause in a SQL query?', 'To sort results alphabetically always', 'To filter rows based on a specified condition', 'To delete a table', 'To create a new column', 'b', 'post'),
+        q('What does it mean to "back up" a database?', 'To delete old data permanently', 'To create a copy of data that can be restored if the original is lost or corrupted', 'To speed up queries automatically', 'To encrypt all passwords', 'b', 'post'),
+        q('Why is data validation important when storing user input in a database?', 'It is not important', 'It helps ensure data is accurate, consistent, and free from harmful input', 'It slows down the database unnecessarily', 'It replaces the need for a database entirely', 'b', 'post'),
+        q('What is an API commonly used for in relation to data?', 'Styling a webpage', 'Allowing different software systems to request and exchange data', 'Compressing video files', 'Designing a database schema only', 'b', 'post'),
+        q('Why might a developer use a "foreign key" between two database tables?', 'To encrypt sensitive data', 'To create a link between related data in different tables', 'To delete unused tables', "To change a table's color", 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Debugging & Problem Solving',
+      questions: [
+        q('What is a "bug" in software?', 'A helpful feature', 'An error or flaw in a program that causes it to behave unexpectedly', 'A type of database', 'A programming language', 'b', 'pre'),
+        q('What is the first step typically recommended when debugging an error?', 'Rewriting the entire program', 'Reproducing the error and understanding exactly what went wrong', 'Ignoring the error message', 'Deleting all the code', 'b', 'pre'),
+        q('What is a "console" or "log" used for in debugging?', 'Styling a webpage', 'Printing information to help understand what a program is doing', 'Sending emails automatically', 'Compressing files', 'b', 'pre'),
+        q('Why is reading the full error message important when debugging?', 'Error messages are never useful', 'It often identifies exactly where and why the error occurred', 'It always fixes the bug automatically', 'It is only useful for beginners', 'b', 'pre'),
+        q('What does it mean to "test" code?', 'To delete it after writing', 'To check whether it behaves as expected under different conditions', 'To make it run slower on purpose', 'To hide it from other developers', 'b', 'pre'),
+        q('What is a good practice when facing a difficult bug?', 'Giving up immediately', 'Breaking the problem into smaller parts to isolate the cause', 'Deleting the entire project', 'Ignoring the error and hoping it resolves itself', 'b', 'pre'),
+        q('What is "rubber duck debugging"?', 'A method for compressing files', 'Explaining your code step-by-step (even to an inanimate object) to spot logical errors', 'A type of software license', 'A database backup technique', 'b', 'post'),
+        q('Why are automated tests valuable in software development?', 'They eliminate the need to ever check code again', 'They help catch bugs early and confirm code still works after changes', 'They make code run without any errors ever', 'They replace the need for documentation', 'b', 'post'),
+        q('What is a "stack trace"?', 'A type of database index', 'A report showing the sequence of function calls that led to an error', 'A network diagram', 'A CSS style sheet', 'b', 'post'),
+        q('Why is it useful to search documentation or community forums (e.g., Stack Overflow) when stuck on a coding problem?', "It's never useful", 'Others have often encountered and solved similar problems, saving time', 'It replaces the need to understand your own code', 'It guarantees a working solution with no verification needed', 'b', 'post'),
+        q('What does it mean to "isolate" a bug?', 'Deleting all related code', 'Narrowing down the specific part of the code causing the unexpected behavior', 'Hiding the error message', 'Ignoring the rest of the program', 'b', 'post'),
+        q("Why is version control useful when debugging a regression (a bug that wasn't there before)?", 'It has no use in debugging', 'It lets you compare code history to find exactly when and where the bug was introduced', 'It automatically writes the fix for you', 'It deletes the buggy code permanently', 'b', 'post'),
+      ],
+    },
   ],
-  [
-    'Savings & Banking',
-    'What is the purpose of a savings account?|To spend money quickly|To set aside money safely while it may earn interest|To avoid using banks|To pay bills only|b',
-    'What is interest, in the context of savings?|A fee you always pay|Money earned on your saved balance over time|A type of loan|A banks logo|b',
-    'What is an emergency fund?|Money set aside for unexpected expenses|A type of loan|A monthly subscription|A tax payment|a',
-    'Why is comparing bank fees important before opening an account?|It is not important|Different accounts may have different costs that affect your savings|All banks charge the same fees always|Fees only apply to loans|b',
-  ],
-]);
+};
 
-const coding = stub('coding', 'Coding & Web Dev', [
-  [
-    'Programming Fundamentals',
-    'What is a variable in programming?|A fixed value that never changes|A named storage location for a value that can change|A type of computer virus|A printer setting|b',
-    'What does a "loop" allow a program to do?|Run a block of code repeatedly|Delete files|Connect to Wi-Fi|Change the screen resolution|a',
-    'What is the purpose of an "if statement"?|To repeat code forever|To execute code conditionally based on a test|To store a password|To connect to a database|b',
-    'What is a function in programming?|A reusable block of code that performs a task|A type of hardware|An internet browser|A file format|a',
+// Vocational & Trade — fully seeded per FR-M1-02.
+const vocational: SeedTemplate = {
+  category: 'vocational',
+  name: 'Vocational & Trade',
+  areas: [
+    {
+      name: 'Workplace Safety',
+      questions: [
+        q('What is the purpose of personal protective equipment (PPE)?', 'To look professional', 'To reduce risk of injury on the job', 'To increase work speed', 'To replace training', 'b', 'pre'),
+        q('What should you do if you notice a safety hazard at work?', 'Ignore it', 'Report it to a supervisor promptly', 'Fix it yourself even without training', 'Wait for someone else to notice', 'b', 'pre'),
+        q('What is the purpose of a Material Safety Data Sheet (MSDS)?', 'To track employee attendance', 'To provide information on the safe handling of hazardous substances', 'To record sales figures', 'To set employee wages', 'b', 'pre'),
+        q('Why is it important to keep a work area clean and organized?', 'It has no safety benefit', 'It reduces trip hazards and helps prevent accidents', 'It only matters for appearance', 'It slows down productivity', 'b', 'pre'),
+        q("What should you do before operating equipment you haven't used before?", 'Start immediately to save time', 'Get proper training or instruction first', 'Only watch a colleague from a distance', 'Assume it works like similar equipment', 'b', 'pre'),
+        q('What is the purpose of an emergency evacuation plan?', 'To decorate the workplace', 'To ensure workers know how to safely exit during an emergency', 'To track work hours', 'To reduce electricity costs', 'b', 'pre'),
+        q('Why is proper training required before operating machinery?', "It's not necessary", 'It reduces risk of accidents and improves safe operation', 'It slows down work unnecessarily', "It's only for new employees", 'b', 'post'),
+        q('What is the purpose of a workplace safety sign?', 'Decoration', 'To warn of hazards and required precautions', 'To advertise products', 'To show break times', 'b', 'post'),
+        q('What should be done immediately after a workplace injury occurs?', 'Ignore it and continue working', 'Report it and seek appropriate first aid or medical attention', 'Hide the incident from supervisors', 'Wait until the end of the shift to mention it', 'b', 'post'),
+        q('Why is lockout/tagout procedure important when servicing equipment?', 'It has no real purpose', 'It prevents equipment from being accidentally started while being serviced, protecting workers', 'It speeds up repairs by skipping safety checks', 'It is only relevant for large factories', 'b', 'post'),
+        q('What is the value of regular safety drills (e.g., fire drills)?', 'They waste work time', 'They help workers respond quickly and correctly during real emergencies', 'They are only required for management', 'They replace the need for safety equipment', 'b', 'post'),
+        q('Why should damaged tools or equipment be reported and removed from use?', 'Damaged tools are always safe to use', 'Using damaged equipment increases the risk of injury or equipment failure', 'It has no impact on safety', 'Only new tools can be damaged', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Tools & Equipment',
+      questions: [
+        q('Why is it important to maintain tools regularly?', 'It has no benefit', 'It ensures tools work safely and effectively', 'It voids the warranty always', "It's only for expensive tools", 'b', 'pre'),
+        q('What should you check before using a piece of equipment?', 'Nothing, just start using it', 'That it is in good working condition and you are trained to use it', 'Only its color', 'Only its price', 'b', 'pre'),
+        q('Why should tools be matched to the correct task?', 'All tools work equally well for every task', 'Using the wrong tool can damage the work, the tool, or cause injury', 'It does not matter which tool is used', 'Only professionals need to match tools to tasks', 'b', 'pre'),
+        q('What is the purpose of routine equipment inspection?', 'To increase the price of the equipment', 'To identify wear, damage, or faults before they cause failure or injury', 'To slow down production intentionally', 'It has no real purpose', 'b', 'pre'),
+        q('Why is proper tool storage important?', 'It has no effect on tool lifespan', 'It prevents damage, loss, and keeps tools ready and safe for use', 'It only matters for appearance', 'Tools never get damaged from poor storage', 'b', 'pre'),
+        q('What does "calibration" mean for a measuring tool?', 'Cleaning the tool', 'Adjusting it to ensure accurate and reliable measurements', 'Painting the tool a new color', 'Increasing its price', 'b', 'pre'),
+        q('What is the purpose of calibrating measurement tools?', 'To make them look new', 'To ensure accurate and reliable measurements', 'To increase their price', 'To change their color', 'b', 'post'),
+        q('Why should tools be stored properly after use?', 'To prevent damage and ensure they are ready and safe for next use', 'It has no real purpose', 'Only to save space', 'Only required for expensive tools', 'a', 'post'),
+        q('What is the risk of using power tools without understanding their safety features?', 'There is no risk', 'Increased risk of injury from improper or unsafe operation', 'It voids the manufacturer\'s warranty only', 'It has no effect on safety', 'b', 'post'),
+        q('Why should equipment manuals be kept and referred to?', 'They contain no useful information', 'They provide important operating instructions, safety guidance, and maintenance schedules', 'They are only useful for warranty claims', 'They are required only for imported equipment', 'b', 'post'),
+        q('What is the benefit of using the correct size/type of fastener (e.g., screws, bolts) for a job?', 'It has no effect on the outcome', 'It ensures structural integrity and reduces risk of failure', 'It only affects appearance', 'Any fastener works equally well', 'b', 'post'),
+        q('Why is it important to disconnect power before servicing electrical equipment?', 'It has no safety benefit', 'It prevents electric shock and accidental activation during servicing', 'It slows down repairs unnecessarily', 'It is only required for large machines', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Quality Control & Standards',
+      questions: [
+        q('What is the purpose of quality control in a trade or production process?', 'To slow down work', 'To ensure products or work meet defined standards before completion', 'To increase costs unnecessarily', 'To reduce customer satisfaction', 'b', 'pre'),
+        q('What is a "standard" in a technical or trade context?', 'A random personal preference', 'An agreed specification or requirement that work or products must meet', 'A type of tool', 'A marketing term', 'b', 'pre'),
+        q('Why is measuring work against a specification important?', 'It has no benefit', 'It ensures the finished work meets the required accuracy and quality', 'It only matters for large projects', 'Specifications are optional in every situation', 'b', 'pre'),
+        q('What is rework in a quality context?', 'Completing a task correctly the first time', 'Redoing work that did not meet the required quality standard', 'A type of safety equipment', 'A financial bonus', 'b', 'pre'),
+        q('Why can poor quality work lead to higher costs over time?', 'It never leads to higher costs', 'It can cause rework, customer complaints, or safety issues that are costly to fix', 'Poor quality always costs less', 'Quality has no relationship to cost', 'b', 'pre'),
+        q('What is the purpose of a checklist in quality assurance?', 'To slow down workers', 'To ensure all required steps or checks are consistently completed', 'To replace the need for training', 'To track employee attendance only', 'b', 'pre'),
+        q('What does "quality assurance" focus on, compared to "quality control"?', 'They are identical in every way', 'Quality assurance focuses on preventing defects through good processes; quality control focuses on identifying defects in the output', 'Quality assurance only applies to software', 'Quality control only applies to safety', 'b', 'post'),
+        q('Why might a customer complaint be valuable to a business?', 'Complaints have no value', 'It can reveal quality issues that need to be corrected', 'It should always be ignored', 'It only matters for large companies', 'b', 'post'),
+        q('What is the purpose of a tolerance range in technical specifications (e.g., ±2mm)?', 'To allow acceptable variation while still meeting quality requirements', 'To make measurements irrelevant', 'To increase costs unnecessarily', 'To indicate a mistake was made', 'a', 'post'),
+        q("Why is consistent quality important for a tradesperson's reputation?", 'Reputation has no connection to quality', 'Consistently good quality builds trust and repeat business', 'Reputation is based only on price', 'Quality has no impact on future work', 'b', 'post'),
+        q('What is a root cause analysis used for after a quality failure?', 'To assign blame only', 'To identify the underlying reason a problem occurred so it can be prevented in future', 'To hide the issue from management', 'To increase production speed only', 'b', 'post'),
+        q('Why might industry certification or licensing matter in a skilled trade?', 'It has no value', 'It can demonstrate verified competence and adherence to recognized standards', 'It is only a formality with no real meaning', 'It guarantees no future mistakes will ever occur', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Customer Service & Professionalism',
+      questions: [
+        q('Why is punctuality important when working with clients?', 'It has no impact on client relationships', "It shows respect for the client's time and builds trust", 'Clients never notice punctuality', 'It only matters for office jobs', 'b', 'pre'),
+        q('What is a key part of good customer communication?', "Ignoring client questions", 'Listening carefully and explaining things clearly', 'Speaking as little as possible', 'Avoiding eye contact', 'b', 'pre'),
+        q('Why should a tradesperson provide a clear estimate before starting work?', 'It has no benefit', 'It helps set expectations and avoid disputes over cost', 'Estimates are never accurate anyway', 'It is only required for large projects', 'b', 'pre'),
+        q("What should you do if you're unable to complete a job on the agreed schedule?", "Say nothing and hope the client doesn't notice", 'Communicate proactively with the client about the delay', 'Blame the client for the delay', 'Ignore the deadline entirely', 'b', 'pre'),
+        q('Why is maintaining a professional appearance and conduct important on a job site?', 'It has no effect on client trust', "It reflects on the worker's and company's reputation and professionalism", 'Appearance never matters in trade work', 'It only matters in office environments', 'b', 'pre'),
+        q('What is the benefit of asking a client clarifying questions before starting work?', 'It wastes time', "It ensures the work matches the client's actual needs and expectations", 'It shows a lack of expertise', 'Clients prefer not to be asked questions', 'b', 'pre'),
+        q('Why is it valuable to follow up with a client after completing a job?', 'It has no value', 'It shows care for satisfaction and can identify any remaining issues', 'Clients never want follow-up', 'It only matters for large companies', 'b', 'post'),
+        q('What is an appropriate way to handle a dissatisfied customer?', 'Argue with them immediately', 'Listen to their concern calmly and work toward a fair resolution', 'Ignore their complaint', 'Blame them for the problem', 'b', 'post'),
+        q("Why might referrals and reviews matter for a tradesperson's business?", 'They have no impact on business', 'Positive word-of-mouth and reviews can help attract new clients', 'They only matter for online-only businesses', 'Reviews are always inaccurate', 'b', 'post'),
+        q('What is the benefit of clear, itemized invoicing for clients?', 'It confuses clients unnecessarily', 'It builds transparency and trust about what was charged and why', 'It has no benefit over a verbal total', 'It is only required by law in some countries', 'b', 'post'),
+        q("Why is confidentiality important when working inside a client's home or business?", 'It has no importance', "It respects the client's privacy and builds trust", 'Confidentiality only matters for medical professions', 'Clients expect their information to be shared', 'b', 'post'),
+        q('What is a good practice when a mistake is made on the job?', 'Hide it from the client', 'Acknowledge it honestly and work to correct it', 'Blame another worker', 'Ignore it and hope it is not noticed', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Technical Measurement & Reading Instructions',
+      questions: [
+        q('Why is accurate measurement important in trade work?', 'It has no real impact', 'Inaccurate measurements can lead to errors, wasted materials, or unsafe results', 'Measurements are always approximate', 'Only large projects require accurate measurement', 'b', 'pre'),
+        q('What is the purpose of a technical drawing or blueprint?', 'To decorate a proposal', 'To communicate precise specifications for how something should be built or assembled', 'To advertise a company', 'To record employee hours', 'b', 'pre'),
+        q('What does a scale on a technical drawing indicate?', "The drawing's price", "The ratio between the drawing's dimensions and the real-world object's dimensions", 'The type of paper used', "The drawing's color scheme", 'b', 'pre'),
+        q('Why is "measure twice, cut once" good practice?', 'It wastes time unnecessarily', 'It helps confirm accuracy before making an irreversible action', 'It has no real benefit', 'It only applies to woodworking', 'b', 'pre'),
+        q('What is a common unit of measurement used in many trades?', 'Kilograms only', 'Millimeters, centimeters, meters, or inches depending on the standard used', 'Only liters', 'Only degrees Celsius', 'b', 'pre'),
+        q('Why is it important to follow manufacturer instructions when installing equipment?', 'Instructions are usually irrelevant', 'They ensure correct, safe installation and help maintain warranty coverage', 'They only apply to expensive equipment', 'It is acceptable to skip instructions if experienced', 'b', 'pre'),
+        q('What might a symbol or legend on a technical drawing represent?', 'Random decoration', 'A standardized meaning for materials, dimensions, or instructions used throughout the drawing', "The drawing's file size", "The artist's signature", 'b', 'post'),
+        q('Why is double-checking units (e.g., mm vs. cm) important when following instructions?', 'Units are always interchangeable', 'Misreading units can lead to significant measurement errors', 'It has no practical impact', 'Units are not used in professional trades', 'b', 'post'),
+        q('What should you do if a set of instructions is unclear or seems incorrect?', 'Guess and proceed anyway', 'Seek clarification from a supervisor, manufacturer, or reliable reference before proceeding', 'Ignore the instructions entirely', 'Assume it does not matter', 'b', 'post'),
+        q('Why might a spirit level or similar tool be used in construction or installation work?', 'To measure temperature', 'To check that a surface or object is level or plumb', 'To measure electrical current', 'To measure sound level', 'b', 'post'),
+        q('What is the risk of not accounting for tolerances (allowed variation) when measuring for a fit (e.g., a part into a slot)?', 'There is no risk', 'The parts may not fit together properly, causing rework or failure', 'Tolerances are only relevant in electronics', 'It always makes the fit better', 'b', 'post'),
+        q('Why is maintaining accurate records of measurements taken on a job useful?', 'It has no use', 'It helps ensure consistency, supports quality checks, and assists with future reference', 'Records are never needed once a job is done', 'Only clients need this information', 'b', 'post'),
+      ],
+    },
   ],
-  [
-    'Web Basics',
-    'What does HTML stand for?|HyperText Markup Language|High Tech Modern Language|Home Tool Markup Language|Hyperlink and Text Machine Language|a',
-    'What is the role of CSS in a webpage?|Storing data in a database|Styling the appearance of a webpage|Running server logic|Sending emails|b',
-    'What does a web browser do when you enter a URL?|Deletes your history|Requests and displays the webpage from a server|Formats your hard drive|Sends an email|b',
-    'What is the purpose of JavaScript on a webpage?|To style text only|To add interactivity and dynamic behavior|To store files permanently|To print documents|b',
-  ],
-]);
+};
 
-const vocational = stub('vocational', 'Vocational & Trade', [
-  [
-    'Workplace Safety',
-    'What is the purpose of personal protective equipment (PPE)?|To look professional|To reduce risk of injury on the job|To increase work speed|To replace training|b',
-    'What should you do if you notice a safety hazard at work?|Ignore it|Report it to a supervisor promptly|Fix it yourself even without training|Wait for someone else to notice|b',
-    'Why is proper training required before operating machinery?|It is not necessary|It reduces risk of accidents and improves safe operation|It slows down work unnecessarily|It is only for new employees|b',
-    'What is the purpose of a workplace safety sign?|Decoration|To warn of hazards and required precautions|To advertise products|To show break times|b',
+// Agricultural & Rural — fully seeded per FR-M1-02.
+const agricultural: SeedTemplate = {
+  category: 'agricultural',
+  name: 'Agricultural & Rural',
+  areas: [
+    {
+      name: 'Crop & Soil Basics',
+      questions: [
+        q('Why is soil testing useful before planting?', 'It has no benefit', 'It helps determine nutrient needs and suitability for crops', 'It replaces the need for water', 'It guarantees a harvest', 'b', 'pre'),
+        q('What is crop rotation?', 'Planting the same crop every season in the same field', 'Changing the type of crop grown in a field each season to maintain soil health', 'Harvesting crops at night', 'A type of fertilizer', 'b', 'pre'),
+        q('What is soil erosion?', 'The process of enriching soil with nutrients', 'The loss or wearing away of topsoil due to wind, water, or poor land management', 'A method of planting seeds', 'A type of irrigation system', 'b', 'pre'),
+        q('Why is organic matter (like compost) beneficial for soil?', 'It has no effect on soil', 'It improves soil structure, nutrient content, and water retention', 'It only affects soil color', 'It replaces the need for sunlight', 'b', 'pre'),
+        q('What is the purpose of mulching around crops?', 'To decorate the field', 'To retain soil moisture, suppress weeds, and regulate temperature', 'To increase pest infestations', 'To remove nutrients from soil', 'b', 'pre'),
+        q("Why is it important to know a crop's ideal planting season?", 'Planting season has no effect on yield', 'Planting at the right time improves germination and yield by matching growing conditions', 'All crops grow equally well in any season', 'It only matters for export crops', 'b', 'pre'),
+        q('What is the purpose of irrigation?', 'To remove weeds', 'To supply water to crops when rainfall is insufficient', 'To harvest crops', 'To test soil pH', 'b', 'post'),
+        q('Why is pest management important for crops?', 'It has no impact on yield', 'It helps protect crops from damage that reduces yield and quality', 'It only affects crop color', 'It replaces the need for soil nutrients', 'b', 'post'),
+        q('What does soil pH measure, and why does it matter for crops?', 'Soil temperature; it has no effect on crops', 'Soil acidity or alkalinity; many crops grow best within a specific pH range', 'Soil color; it affects only appearance', 'Soil weight; it has no agricultural relevance', 'b', 'post'),
+        q('What is intercropping?', 'Growing a single crop across an entire region', 'Growing two or more crops together in the same field to make efficient use of resources', 'A method of storing harvested crops', 'A type of soil testing', 'b', 'post'),
+        q('Why might a farmer use certified seeds instead of saved seeds from a previous harvest?', 'Certified seeds have no advantages', 'Certified seeds are often bred for better yield, disease resistance, or quality consistency', 'Certified seeds are always cheaper', 'Saved seeds always produce better results', 'b', 'post'),
+        q('What is the risk of over-irrigating crops?', 'There is no risk', 'It can cause root damage, nutrient loss, and increased disease risk', 'It always improves yield', 'It has no effect on soil', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Farm Business Basics',
+      questions: [
+        q('Why should a farmer keep records of expenses and sales?', "It's not useful", 'To track profitability and make informed decisions', 'Only for tax purposes in some countries', 'It has no purpose', 'b', 'pre'),
+        q('What factor most directly affects the price a farmer receives for produce?', "The farmer's age", 'Market supply and demand', "The farmer's height", 'The color of the packaging only', 'b', 'pre'),
+        q('What is a "cost of production" for a farmer?', 'Only the selling price of the crop', 'The total expenses incurred to grow and harvest a crop', "The farmer's personal savings", 'A government subsidy', 'b', 'pre'),
+        q('Why is market research useful before choosing what crop to grow?', 'It has no benefit', 'It helps identify demand and likely prices, reducing the risk of unsold produce', 'All crops sell for the same price everywhere', 'Market research only applies to large farms', 'b', 'pre'),
+        q('What is the benefit of diversifying crops or income sources on a farm?', 'It has no benefit', 'It can reduce risk if one crop fails or prices drop', 'It always increases costs with no benefit', 'It guarantees higher profit regardless of conditions', 'b', 'pre'),
+        q('Why might a farmer negotiate prices directly with buyers rather than accepting the first offer?', 'Negotiation is never useful', 'It can help secure a fairer price based on market conditions', 'Prices are always fixed by law', 'Buyers never negotiate', 'b', 'pre'),
+        q('What is the benefit of joining a farmer cooperative?', 'No benefit', 'Shared resources, bargaining power, and market access', 'It requires giving up your farm', 'It only applies to livestock', 'b', 'post'),
+        q('Why is post-harvest storage important?', 'It has no effect on produce', 'It reduces losses and preserves produce quality before sale', 'It only matters for grains', 'It increases pest damage intentionally', 'b', 'post'),
+        q('What is a farm business plan primarily used for?', 'Decorating the farm', 'Outlining goals, costs, expected income, and strategy for the farming operation', 'Only for applying to competitions', 'It has no practical purpose', 'b', 'post'),
+        q('Why might access to credit or loans matter for a small-scale farmer?', 'Credit has no value in farming', 'It can help fund inputs like seeds, fertilizer, or equipment needed to improve production', 'Loans are only useful for buying land', 'Credit guarantees a profitable harvest', 'b', 'post'),
+        q('What is value addition in an agricultural business context?', 'Selling raw produce only', 'Processing or transforming raw produce into a product that can be sold at a higher price', 'Reducing the quality of produce', 'A type of crop rotation', 'b', 'post'),
+        q('Why is understanding contract terms important before selling to a buyer in advance (e.g., a forward contract)?', 'Contracts have no real effect', 'It clarifies price, quantity, and delivery expectations, reducing disputes', 'Contracts are never enforceable in agriculture', 'It only matters for international trade', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Livestock & Animal Husbandry',
+      questions: [
+        q('What is animal husbandry?', 'The study of soil types', 'The practice of breeding and raising livestock for food, fiber, labor, or other products', 'A type of irrigation system', 'A method of crop rotation', 'b', 'pre'),
+        q('Why is clean drinking water important for livestock?', 'It has no impact on animal health', 'It helps prevent disease and supports healthy growth and production', 'Animals do not need regular water access', 'It only matters for large animals', 'b', 'pre'),
+        q('What is the purpose of vaccinating livestock?', "To increase the animal's weight only", 'To protect animals from specific infectious diseases', "To change the animal's diet", 'To mark ownership', 'b', 'pre'),
+        q('Why is proper shelter important for livestock?', 'It has no effect on animal welfare', 'It protects animals from extreme weather and predators, supporting health and productivity', 'Shelter only matters for pets', "It reduces the animal's lifespan", 'b', 'pre'),
+        q('What is a balanced diet for livestock intended to provide?', 'Only water', 'The right combination of nutrients needed for health, growth, and production', 'Unlimited food regardless of nutrition', 'Only medication', 'b', 'pre'),
+        q('Why should sick animals be separated from the rest of the herd/flock?', 'It has no benefit', 'It helps prevent the spread of disease to healthy animals', 'Sick animals always recover faster alone', 'It is only a legal requirement, not a health measure', 'b', 'pre'),
+        q('What is the purpose of record-keeping for livestock (e.g., breeding, health, weight)?', 'It has no value', 'It helps track productivity, health trends, and supports better management decisions', 'It is only useful for very large farms', 'Records are required only for export animals', 'b', 'post'),
+        q('Why might rotational grazing (moving animals between pasture areas) be beneficial?', 'It has no benefit', 'It allows pasture to recover, improving long-term land and animal health', 'It always reduces the amount of available grass', 'It only applies to dairy farming', 'b', 'post'),
+        q('What is the risk of overcrowding animals in a limited space?', 'There is no risk', 'Increased stress, disease spread, and reduced productivity', 'It always improves growth rates', 'It has no effect on animal welfare', 'b', 'post'),
+        q('Why is deworming livestock periodically recommended?', 'It has no health benefit', 'It helps control internal parasites that can affect growth and health', 'It is only cosmetic', 'It replaces the need for vaccination', 'b', 'post'),
+        q('What is the benefit of working with a veterinarian or animal health worker?', 'It has no benefit over self-treatment', 'Professional guidance can improve disease prevention, diagnosis, and treatment outcomes', 'Veterinarians only work with pets', 'It is only useful in emergencies', 'b', 'post'),
+        q('Why does genetics/breed selection matter in livestock production?', 'It has no impact on outcomes', 'Different breeds/genetics can affect productivity, disease resistance, and adaptability to local conditions', 'All breeds perform identically everywhere', 'Breed selection only matters for competitions', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Climate-Smart & Sustainable Practices',
+      questions: [
+        q('What does "climate-smart agriculture" generally aim to do?', 'Ignore weather patterns entirely', 'Increase productivity and resilience while reducing environmental impact amid changing climate conditions', 'Only apply to large industrial farms', 'Eliminate the need for water', 'b', 'pre'),
+        q('Why might water conservation techniques (e.g., drip irrigation) be important for farmers?', 'They have no benefit', 'They help use water more efficiently, especially important in dry or water-scarce regions', 'They always increase water waste', 'They are only relevant for greenhouse farming', 'b', 'pre'),
+        q('What is agroforestry?', 'Removing all trees from farmland', 'Integrating trees and shrubs into crop and/or livestock systems for mutual benefit', 'A type of chemical fertilizer', 'A livestock vaccination program', 'b', 'pre'),
+        q('Why is soil conservation important for long-term farm productivity?', 'Soil is an unlimited resource', 'Healthy soil is essential for sustained crop yields, and degraded soil reduces long-term productivity', 'Soil conservation has no impact on yield', 'It only matters for organic farms', 'b', 'pre'),
+        q('What is a benefit of using drought-resistant crop varieties in areas prone to dry spells?', 'They have no advantage over other varieties', 'They can maintain better yields under water stress, reducing risk of crop failure', 'They always require more water', 'They eliminate the need for any water at all', 'b', 'pre'),
+        q('Why might diversifying crops help farmers adapt to unpredictable weather?', 'Diversification has no protective effect', 'If one crop is affected by adverse conditions, others may still produce a harvest, reducing overall risk', 'Diversification always increases costs with no benefit', 'It only matters for export markets', 'b', 'pre'),
+        q('What is composting, and why is it a sustainable practice?', 'Burning agricultural waste; it improves air quality', 'Recycling organic waste into nutrient-rich material for soil; it reduces waste and improves soil health', 'A type of pesticide application', 'A method for storing grain', 'b', 'post'),
+        q('Why is reducing chemical pesticide overuse considered a sustainable practice?', 'Pesticides have no negative effects', 'Overuse can harm beneficial organisms, contaminate water, and lead to resistant pests', 'Reducing pesticide use always reduces yield with no benefit', 'It has no environmental impact', 'b', 'post'),
+        q('What is integrated pest management (IPM)?', 'Using only chemical pesticides', 'A strategy combining multiple methods (biological, cultural, physical, and chemical) to manage pests sustainably', 'Ignoring pest problems entirely', 'A type of irrigation system', 'b', 'post'),
+        q('Why might renewable energy (e.g., solar-powered water pumps) benefit small-scale farms?', 'It has no practical benefit', 'It can reduce fuel costs and provide reliable power in areas without grid access', 'It always costs more with no return', 'It only works in industrial settings', 'b', 'post'),
+        q('What is the value of monitoring local weather and climate forecasts for farm planning?', 'It has no practical value', 'It helps farmers make timely decisions about planting, irrigation, and harvest', 'Forecasts are always inaccurate and unusable', 'It only matters for large commercial farms', 'b', 'post'),
+        q('Why is protecting water sources (e.g., rivers, wells) from contamination important for farming communities?', 'Water sources have no connection to farming', 'Clean water is essential for crops, livestock, and community health', 'Contamination only affects industrial users', 'It has no long-term impact', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Post-Harvest Handling & Value Addition',
+      questions: [
+        q('What is "post-harvest loss"?', 'Profit made after selling a harvest', 'The reduction in quantity or quality of produce between harvest and consumption/sale', 'A type of fertilizer', 'A government tax on crops', 'b', 'pre'),
+        q('Why is proper drying of grains important before storage?', 'It has no effect on storage', 'It reduces moisture that can lead to mold, spoilage, and pest infestation', "Drying always reduces the grain's value", 'It is only needed for export crops', 'b', 'pre'),
+        q('What is the purpose of proper packaging for harvested produce?', 'To increase spoilage', 'To protect produce from damage and contamination during handling and transport', 'Packaging has no effect on produce quality', 'It is only for marketing purposes', 'b', 'pre'),
+        q('Why should harvested produce be sorted and graded?', 'Sorting has no practical benefit', 'It helps separate quality levels, which can affect pricing and reduce spread of spoilage', 'All produce should always be sold together regardless of quality', 'Grading is only relevant for export markets', 'b', 'pre'),
+        q('What is a common cause of post-harvest losses in fruits and vegetables?', 'Excessive care during handling', 'Poor handling, inadequate storage, and delays in getting produce to market', 'Selling produce too quickly after harvest', 'Using proper storage facilities', 'b', 'pre'),
+        q('Why is timing important when harvesting crops?', 'Harvest timing has no effect on quality', 'Harvesting at the right maturity stage affects quality, shelf life, and market value', 'All crops should be harvested at the same time regardless of type', 'Timing only matters for flowers', 'b', 'pre'),
+        q('What is value addition through processing (e.g., turning tomatoes into paste)?', 'Selling raw produce at a lower price', 'Transforming raw agricultural produce into a product with increased market value', 'Reducing the shelf life of produce', 'A type of pest control', 'b', 'post'),
+        q('Why might cold storage or cooling be valuable for perishable produce?', 'It has no effect on shelf life', 'It slows spoilage, extending the time produce can be stored or transported', 'Cooling always damages fresh produce', 'It is only useful for meat products', 'b', 'post'),
+        q('What is the benefit of building relationships with reliable buyers or aggregators?', 'It has no benefit', 'It can provide more consistent market access and potentially better prices', 'It always results in lower prices', 'It replaces the need for quality produce', 'b', 'post'),
+        q('Why is traceability (knowing where produce came from and how it was handled) increasingly important in some markets?', 'It has no market value', 'Some buyers/markets require it for quality assurance and food safety', 'Traceability is only relevant for livestock', 'It has no connection to food safety', 'b', 'post'),
+        q('What is a simple method small-scale farmers might use to reduce grain storage losses?', 'Storing grain with high moisture content', 'Using proper drying and appropriate storage containers/facilities to protect against pests and moisture', 'Ignoring pest control during storage', 'Selling all grain immediately regardless of price', 'b', 'post'),
+        q("Why can reducing post-harvest losses improve a farmer's income without increasing production?", 'It cannot improve income', 'Selling more of what is already produced (instead of losing it) directly increases the amount available for sale', "It only affects the farmer's personal consumption", 'It has no connection to income', 'b', 'post'),
+      ],
+    },
   ],
-  [
-    'Tools & Equipment',
-    'Why is it important to maintain tools regularly?|It has no benefit|It ensures tools work safely and effectively|It voids the warranty always|It is only for expensive tools|b',
-    'What should you check before using a piece of equipment?|Nothing, just start using it|That it is in good working condition and you are trained to use it|Only its color|Only its price|b',
-    'What is the purpose of calibrating measurement tools?|To make them look new|To ensure accurate and reliable measurements|To increase their price|To change their color|b',
-    'Why should tools be stored properly after use?|To prevent damage and ensure they are ready and safe for next use|It has no real purpose|Only to save space|Only required for expensive tools|a',
-  ],
-]);
+};
 
-const agricultural = stub('agricultural', 'Agricultural & Rural', [
-  [
-    'Crop & Soil Basics',
-    'Why is soil testing useful before planting?|It has no benefit|It helps determine nutrient needs and suitability for crops|It replaces the need for water|It guarantees a harvest|b',
-    'What is crop rotation?|Planting the same crop every season in the same field|Changing the type of crop grown in a field each season to maintain soil health|Harvesting crops at night|A type of fertilizer|b',
-    'What is the purpose of irrigation?|To remove weeds|To supply water to crops when rainfall is insufficient|To harvest crops|To test soil pH|b',
-    'Why is pest management important for crops?|It has no impact on yield|It helps protect crops from damage that reduces yield and quality|It only affects crop color|It replaces the need for soil nutrients|b',
+// Creator Economy — fully seeded per FR-M1-02.
+const creatorEconomy: SeedTemplate = {
+  category: 'creator_economy',
+  name: 'Creator Economy',
+  areas: [
+    {
+      name: 'Content Creation Basics',
+      questions: [
+        q('What is the purpose of a content calendar?', 'To delete old posts', 'To plan and schedule content in advance', 'To block followers', 'To change your username', 'b', 'pre'),
+        q('Why is video lighting important for content creators?', 'It has no effect on quality', 'Good lighting improves visual quality and viewer engagement', 'It only matters for photos', 'It replaces the need for a camera', 'b', 'pre'),
+        q('What is the purpose of a "hook" at the start of a video or post?', 'To confuse the viewer', 'To capture attention quickly and encourage the audience to keep watching', 'To end the content early', 'To reduce viewer interest', 'b', 'pre'),
+        q('Why is audio quality important in video content?', 'Audio has no impact on viewer experience', 'Poor audio can cause viewers to leave even if the video looks good', 'Viewers never notice audio quality', 'It only matters for music content', 'b', 'pre'),
+        q('What is the benefit of planning content around a clear theme or niche?', 'It has no benefit', 'It helps attract and retain a specific, engaged audience', 'Niches always limit growth with no upside', 'It only matters for large creators', 'b', 'pre'),
+        q('Why might a content creator repurpose one piece of content into multiple formats (e.g., a video into short clips)?', 'It wastes time with no benefit', 'It maximizes reach across platforms with less additional effort', 'Repurposing content is against platform rules', 'It only works for written content', 'b', 'pre'),
+        q('What does "editing" typically improve in a piece of content?', 'Nothing', 'Pacing, clarity, and overall quality', 'Only the file size', 'Only the title', 'b', 'post'),
+        q('Why is consistency in posting schedule valuable for creators?', 'It has no impact', 'It helps build and retain an audience over time', 'It only matters for live streams', 'It reduces content quality', 'b', 'post'),
+        q('What is the purpose of a thumbnail on platforms like YouTube?', 'It has no effect on views', 'To visually represent the content and attract clicks', 'It only matters for paid ads', 'It replaces the need for a title', 'b', 'post'),
+        q('Why might a creator analyze which content performed best over time?', 'Analysis has no value', 'It helps identify what resonates with the audience to inform future content', 'Past performance never predicts future results', 'It only matters for large channels', 'b', 'post'),
+        q('What is the risk of prioritizing quantity of content over quality?', 'There is no risk', 'It can reduce overall audience trust and engagement if quality drops', 'Quantity always outweighs quality on every platform', 'It has no effect on growth', 'b', 'post'),
+        q('Why is originality valuable in content creation, even when covering popular topics?', 'Originality has no value', 'It helps a creator stand out and build a distinct identity amid similar content', 'Audiences prefer identical content from every creator', 'It only matters for music', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Audience & Monetization',
+      questions: [
+        q('What does "engagement" measure on a content platform?', 'Server speed', 'How audiences interact with content, e.g. likes, comments, shares', 'Upload file size', 'Battery usage', 'b', 'pre'),
+        q('What is a common way creators monetize content?', 'Ignoring their audience', 'Sponsorships, ads, or selling products/services', 'Deleting all their content', 'Blocking all viewers', 'b', 'pre'),
+        q('What is an "audience persona"?', "A creator's stage name", "A profile representing the typical characteristics and interests of a creator's target audience", 'A type of video filter', "A platform's terms of service", 'b', 'pre'),
+        q('Why is understanding audience demographics (age, location, interests) useful for a creator?', 'It has no practical use', 'It helps tailor content and monetization strategies to who is actually watching', 'Demographics never change over time', 'It only matters for advertisers, not creators', 'b', 'pre'),
+        q('What is affiliate marketing in the context of content creation?', 'Posting content with no business purpose', "Earning a commission by promoting another company's product using a tracked link", 'A type of copyright violation', 'A platform penalty', 'b', 'pre'),
+        q('Why might diversifying income streams (e.g., ads, sponsorships, products) benefit a creator?', 'It has no benefit', 'It reduces dependency on any single source of income, which can be unstable', 'Multiple income streams always violate platform rules', 'It only matters for creators with huge followings', 'b', 'pre'),
+        q('Why is knowing your target audience important?', 'It has no impact', 'It helps tailor content that resonates and grows engagement', 'It only matters for large creators', 'It replaces the need for content quality', 'b', 'post'),
+        q('What is a potential risk of relying on a single platform for income?', 'There is no risk', 'Platform changes or bans could significantly impact income', 'It guarantees stable income forever', 'It has no effect on strategy', 'b', 'post'),
+        q('What is a "call to action" (CTA) in content, and why is it used?', 'A legal requirement; it has no marketing purpose', 'A prompt encouraging the audience to take a specific action, like subscribing or buying; it helps drive engagement or sales', 'A type of copyright notice', 'A platform penalty warning', 'b', 'post'),
+        q('Why might engagement rate be considered more meaningful than follower count alone?', 'Follower count is always the better metric', 'A smaller but highly engaged audience can be more valuable for monetization and influence than a large, inactive one', 'Engagement rate has no relationship to monetization', 'Platforms do not track engagement', 'b', 'post'),
+        q('What is the purpose of a media kit for creators seeking brand partnerships?', 'It has no real purpose', 'It summarizes audience data, past collaborations, and rates to present to potential sponsors', 'It replaces the need for content entirely', 'It is only used by large agencies', 'b', 'post'),
+        q('Why is transparency about sponsored content (e.g., disclosure) important?', 'It has no importance', 'It maintains audience trust and often complies with legal/platform requirements', 'Disclosure always reduces earnings with no other effect', 'It is only relevant for television advertising', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Platform-Specific Strategy',
+      questions: [
+        q('Why do different social media platforms often require different content strategies?', 'All platforms have identical audiences and formats', 'Platforms differ in audience behavior, content format, and algorithm preferences', 'Strategy never needs to change between platforms', 'Only the posting time matters, nothing else', 'b', 'pre'),
+        q('What does a platform\'s "algorithm" generally determine?', "The creator's income directly", "Which content is shown to which users and how widely it's distributed", "The exact wording of a post's caption", "The color scheme of a creator's profile", 'b', 'pre'),
+        q('Why might short-form video (e.g., Reels, TikTok, Shorts) behave differently in reach compared to long-form video?', 'They are treated identically by every platform', 'Platforms often use different algorithms and audience behaviors for short vs. long content', 'Short-form video is never recommended by algorithms', 'Long-form video always gets more reach on every platform', 'b', 'pre'),
+        q('What is the value of researching trending topics or formats on a platform?', 'It has no value', 'It can help content align with what the algorithm and audience are currently favoring', 'Trends never affect content performance', 'It only matters for entertainment content', 'b', 'pre'),
+        q('Why might posting times matter for content performance?', 'Posting time has no effect on visibility', 'Posting when your audience is most active can improve initial engagement, which some algorithms reward', 'All platforms show content at the same rate regardless of timing', 'Timing only matters for live streams', 'b', 'pre'),
+        q('What is a platform "algorithm update," and why should creators pay attention to it?', "A cosmetic change to the app's logo", "A change in how content is ranked or distributed, which can affect a creator's reach", 'It never affects existing creators', 'It only applies to new accounts', 'b', 'pre'),
+        q('Why might a creator adapt the same core content differently across platforms (e.g., different captions, formats) rather than posting identically everywhere?', 'Adaptation has no benefit', "Each platform's audience and format expectations differ, affecting how content should be presented", 'Identical content always performs the same everywhere', 'Platforms require identical formatting by law', 'b', 'post'),
+        q('What is the risk of relying entirely on viral, one-off content for growth?', 'There is no risk', "Virality is often unpredictable and doesn't guarantee sustained audience growth or loyalty", 'Viral content always leads to stable long-term income', 'It guarantees future virality', 'b', 'post'),
+        q("Why might understanding a platform's community guidelines matter for a creator's strategy?", 'Guidelines have no effect on content', 'Violating them can result in reduced reach, content removal, or account suspension', 'Guidelines only apply to advertisers', 'Guidelines are identical across all platforms', 'b', 'post'),
+        q('What is A/B testing in the context of content strategy (e.g., testing two thumbnails)?', 'A type of copyright claim', 'Comparing two content variations to see which performs better with the audience', 'A platform penalty for creators', 'A method of deleting underperforming content automatically', 'b', 'post'),
+        q("Why might cross-promotion (mentioning one platform's content on another) help a creator?", 'It has no benefit', 'It can help move an audience across platforms and diversify where they can be reached', 'Cross-promotion is banned on all platforms', 'It only works for platforms with identical formats', 'b', 'post'),
+        q("Why should creators periodically review platform analytics rather than relying on assumptions about what's working?", 'Analytics are never accurate', 'Actual data can reveal what is genuinely resonating with the audience, which may differ from assumptions', 'Assumptions are always more reliable than data', 'Analytics only matter for advertisers', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Branding & Personal Identity',
+      questions: [
+        q('What is "personal branding" for a content creator?', 'A legal registration process', 'The consistent identity, values, and style a creator presents to their audience', 'A type of copyright license', "A platform's terms of service", 'b', 'pre'),
+        q("Why is consistency in visual style (e.g., colors, logo, tone) important for a creator's brand?", 'It has no effect on recognition', "It helps audiences recognize and build familiarity with the creator's content", 'Visual consistency always limits creativity with no benefit', 'It only matters for large companies', 'b', 'pre'),
+        q('What is a creator\'s "niche" in the context of branding?', 'A type of camera equipment', 'The specific topic, style, or audience focus that defines their content', 'A platform penalty', 'A legal business structure', 'b', 'pre'),
+        q("Why might authenticity matter in building a creator's personal brand?", "Authenticity has no impact on audience trust", 'Audiences often value genuine, relatable creators over ones that appear inauthentic', 'Authenticity always reduces growth potential', 'It only matters for beauty/lifestyle content', 'b', 'pre'),
+        q('What is a "bio" or profile description typically used for?', 'To list unrelated personal information only', 'To quickly communicate who the creator is and what their content offers', 'It has no effect on new visitors', 'It is only relevant for business accounts', 'b', 'pre'),
+        q("Why might a creator define their core values or mission before growing their brand?", 'It has no strategic value', 'It helps guide consistent content and partnership decisions aligned with their identity', 'Values never influence audience perception', 'It only matters for nonprofit organizations', 'b', 'pre'),
+        q("Why might inconsistent messaging or frequent identity changes hurt a creator's brand?", 'Consistency has no bearing on brand strength', 'It can confuse the audience and weaken trust or recognition', 'Frequent changes always increase audience loyalty', 'Branding has no connection to trust', 'b', 'post'),
+        q("What is the risk of a personal brand becoming too dependent on a single trend?", 'There is no risk', 'The brand may struggle to stay relevant once the trend fades', 'Trends never fade in the creator economy', 'It guarantees long-term relevance', 'b', 'post'),
+        q("Why might a creator's brand extend beyond content into products or services (e.g., merchandise, courses)?", "Brand extension has no connection to a creator's core identity", 'A strong, trusted brand can support related products or services the audience is interested in', "Extensions always dilute a creator's brand with no benefit", 'It only applies to celebrities', 'b', 'post'),
+        q('What is the value of a consistent posting "voice" or tone (e.g., humorous, educational)?', 'It has no value', 'It helps the audience know what to expect, strengthening brand identity', 'Tone should change randomly to keep audiences guessing', 'It only matters for written content', 'b', 'post'),
+        q('Why is protecting a brand name or handle across platforms often recommended?', 'It has no practical benefit', 'It helps maintain consistent identity and prevents confusion or impersonation', 'Handles are always identical automatically across platforms', 'It is only relevant for registered trademarks', 'b', 'post'),
+        q('Why might a creator evolve their brand over time while keeping some core elements consistent?', 'Evolution always destroys a brand', 'Growth and changing interests are natural, but consistent core elements maintain audience trust and recognition', 'Brands should never change once created', 'Core elements have no impact on recognition', 'b', 'post'),
+      ],
+    },
+    {
+      name: 'Legal & Business Basics for Creators',
+      questions: [
+        q('What is copyright, in the context of content creation?', "A platform's algorithm", 'A legal protection giving creators rights over their original work', 'A type of camera setting', 'A social media hashtag', 'b', 'pre'),
+        q("Why should a creator be cautious about using someone else's music or footage without permission?", 'There is no risk in doing so', 'It may violate copyright, leading to content removal or legal issues', 'Copyright only applies to text, not media', 'Permission is never required for any content', 'b', 'pre'),
+        q('What is a content license typically used for?', 'To restrict a creator from ever posting again', 'To define how content can be used, shared, or reproduced by others', 'It has no legal function', 'It is only relevant for physical products', 'b', 'pre'),
+        q('Why is it important to have clear terms in a sponsorship or brand deal agreement?', 'Terms have no real effect', 'It clarifies expectations, deliverables, and payment, reducing the risk of disputes', 'Agreements are never enforceable in the creator economy', 'Only large creators need agreements', 'b', 'pre'),
+        q('What does "fair use" generally refer to (where it exists in law)?', 'Unlimited free use of any copyrighted content', 'A legal doctrine allowing limited use of copyrighted material without permission under specific conditions', 'A rule that applies only to news organizations', 'A platform-specific monetization feature', 'b', 'pre'),
+        q('Why might a creator need to track and report income from content creation?', 'Income from content creation is never taxable', 'Many jurisdictions require reporting income, including from platforms and sponsorships, for tax purposes', 'Tracking income has no legal or financial relevance', 'Only registered businesses need to track income', 'b', 'pre'),
+        q('What is the purpose of a contract when collaborating with another creator or brand?', 'It has no real purpose', "It formally defines each party's responsibilities, rights, and compensation", 'Contracts are only relevant for large companies', 'Verbal agreements are always legally sufficient and preferred', 'b', 'post'),
+        q('Why might registering as a business (where applicable) benefit a creator earning significant income?', 'It has no benefit', "It may offer legal and tax advantages, and formalize the creator's operations", 'Registration always increases taxes with no benefit', 'It is required before posting any content', 'b', 'post'),
+        q("What is the risk of using a third party's trademarked brand name or logo in content without permission?", 'There is no risk', 'It could lead to legal claims or content takedowns', 'Trademarks only apply to physical products', 'Permission is never needed for non-commercial content', 'b', 'post'),
+        q('Why is it wise for a creator to keep records of contracts, invoices, and payments?', 'Records have no practical value', 'They support financial management, tax reporting, and resolving any future disputes', 'Records are only useful for large companies', 'It has no legal relevance', 'b', 'post'),
+        q('What should a creator consider before agreeing to exclusivity clauses in a brand deal (e.g., not working with competitors)?', 'Exclusivity clauses have no impact on future opportunities', 'They can limit future income opportunities, so terms and duration should be carefully reviewed', 'Exclusivity clauses are never included in creator contracts', 'They only affect the brand, not the creator', 'b', 'post'),
+        q('Why might understanding data privacy basics matter for a creator collecting audience information (e.g., email lists)?', 'Privacy has no relevance to content creators', 'Mishandling audience data can violate privacy laws and damage audience trust', 'Data privacy laws only apply to large corporations', 'Audience data collection has no legal considerations', 'b', 'post'),
+      ],
+    },
   ],
-  [
-    'Farm Business Basics',
-    'Why should a farmer keep records of expenses and sales?|It is not useful|To track profitability and make informed decisions|Only for tax purposes in some countries|It has no purpose|b',
-    'What factor most directly affects the price a farmer receives for produce?|The farmers age|Market supply and demand|The farmers height|The color of the packaging only|b',
-    'What is the benefit of joining a farmer cooperative?|No benefit|Shared resources, bargaining power, and market access|It requires giving up your farm|It only applies to livestock|b',
-    'Why is post-harvest storage important?|It has no effect on produce|It reduces losses and preserves produce quality before sale|It only matters for grains|It increases pest damage intentionally|b',
-  ],
-]);
-
-const creatorEconomy = stub('creator_economy', 'Creator Economy', [
-  [
-    'Content Creation Basics',
-    'What is the purpose of a content calendar?|To delete old posts|To plan and schedule content in advance|To block followers|To change your username|b',
-    'Why is video lighting important for content creators?|It has no effect on quality|Good lighting improves visual quality and viewer engagement|It only matters for photos|It replaces the need for a camera|b',
-    'What does "editing" typically improve in a piece of content?|Nothing|Pacing, clarity, and overall quality|Only the file size|Only the title|b',
-    'Why is consistency in posting schedule valuable for creators?|It has no impact|It helps build and retain an audience over time|It only matters for live streams|It reduces content quality|b',
-  ],
-  [
-    'Audience & Monetization',
-    'What does "engagement" measure on a content platform?|Server speed|How audiences interact with content, e.g. likes, comments, shares|Upload file size|Battery usage|b',
-    'What is a common way creators monetize content?|Ignoring their audience|Sponsorships, ads, or selling products/services|Deleting all their content|Blocking all viewers|b',
-    'Why is knowing your target audience important?|It has no impact|It helps tailor content that resonates and grows engagement|It only matters for large creators|It replaces the need for content quality|b',
-    'What is a potential risk of relying on a single platform for income?|There is no risk|Platform changes or bans could significantly impact income|It guarantees stable income forever|It has no effect on strategy|b',
-  ],
-]);
+};
 
 export const TEMPLATES: SeedTemplate[] = [digitalSkills, financialLiteracy, coding, vocational, agricultural, creatorEconomy];
