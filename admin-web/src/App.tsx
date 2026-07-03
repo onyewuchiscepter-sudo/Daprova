@@ -5,6 +5,10 @@ import LoginPage from './pages/LoginPage';
 import FrameworksListPage from './pages/FrameworksListPage';
 import NewFrameworkPage from './pages/NewFrameworkPage';
 import FrameworkDetailPage from './pages/FrameworkDetailPage';
+import CoursesListPage from './pages/CoursesListPage';
+import NewCoursePage from './pages/NewCoursePage';
+import CourseDetailPage from './pages/CourseDetailPage';
+import CohortDashboardPage from './pages/CohortDashboardPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, restoring } = useAuth();
@@ -27,7 +31,11 @@ function AppRoutes() {
         <Route path="/frameworks" element={<FrameworksListPage />} />
         <Route path="/frameworks/new" element={<NewFrameworkPage />} />
         <Route path="/frameworks/:id" element={<FrameworkDetailPage />} />
-        <Route path="/" element={<Navigate to="/frameworks" replace />} />
+        <Route path="/courses" element={<CoursesListPage />} />
+        <Route path="/courses/new" element={<NewCoursePage />} />
+        <Route path="/courses/:id" element={<CourseDetailPage />} />
+        <Route path="/cohorts/:id" element={<CohortDashboardPage />} />
+        <Route path="/" element={<Navigate to="/courses" replace />} />
       </Route>
     </Routes>
   );

@@ -15,6 +15,9 @@ export default function Layout() {
       <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="font-semibold text-slate-900">Daprova Admin</span>
+          <Link to="/courses" className="text-sm text-slate-600 hover:text-slate-900">
+            Courses
+          </Link>
           <Link to="/frameworks" className="text-sm text-slate-600 hover:text-slate-900">
             Frameworks
           </Link>
