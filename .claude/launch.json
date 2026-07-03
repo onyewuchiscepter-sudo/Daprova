@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:admin"],
       "port": 5173
+    },
+    {
+      "name": "assessment-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:assess"],
+      "port": 5174
     }
   ]
 }

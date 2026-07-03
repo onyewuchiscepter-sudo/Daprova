@@ -5,11 +5,13 @@
   "workspaces": [
     "api",
     "admin-web",
+    "assessment-web",
     "shared"
   ],
   "scripts": {
     "dev:api": "npm run dev --workspace=api",
     "dev:admin": "npm run dev --workspace=admin-web",
+    "dev:assess": "npm run dev --workspace=assessment-web",
     "migrate": "npm run migrate --workspace=api",
     "seed": "npm run seed --workspace=api",
     "emulators": "firebase emulators:start --only auth"

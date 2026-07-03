@@ -15,4 +15,5 @@ export const env = {
   firebaseProjectId: required('FIREBASE_PROJECT_ID', 'daprova-dev'),
   firebaseAuthEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099',
   adminDashboardOrigin: process.env.ADMIN_DASHBOARD_ORIGIN ?? 'http://localhost:5173',
+  assessmentWebOrigin: process.env.ASSESSMENT_WEB_ORIGIN ?? 'http://localhost:5174',
 };
