@@ -8,7 +8,12 @@ export function setSessionToken(token: string | null) {
 export async function apiFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
-  if (sessionToken) headers.set('Authorization', `Bearer ${sessionToken}`);
+  // Only inject the stored Daprova session token if the caller didn't already
+  // set an explicit Authorization header — auth.tsx's signIn() needs to send
+  // the *Firebase* ID token to /auth/verify, which this used to silently
+  // clobber with a stale (or absent) Daprova session token, causing
+  // "Invalid Firebase ID token" even with a perfectly valid token.
+  if (sessionToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${sessionToken}`);
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
