@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.DS_Store
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
