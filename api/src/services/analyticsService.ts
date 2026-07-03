@@ -31,6 +31,32 @@ export async function getMeanGain(cohortId: string) {
   };
 }
 
+// US-11 — pass rate (% of learners whose post score meets the cohort's
+// pass_threshold), needed alongside mean gain on the cohort dashboard.
+export async function getPassRate(cohortId: string, passThreshold: number) {
+  const row = await db
+    .selectFrom('assessment_sessions as pre')
+    .innerJoin('assessment_sessions as post', (join) =>
+      join
+        .onRef('pre.learner_id', '=', 'post.learner_id')
+        .onRef('pre.cohort_id', '=', 'post.cohort_id')
+        .on('pre.session_type', '=', 'pre')
+        .on('post.session_type', '=', 'post')
+        .on('pre.status', '=', 'completed')
+        .on('post.status', '=', 'completed'),
+    )
+    .select(({ fn }) => [
+      sql<string>`count(*) filter (where post.total_score >= ${passThreshold})`.as('passed'),
+      fn.countAll().as('total'),
+    ])
+    .where('pre.cohort_id', '=', cohortId)
+    .executeTakeFirst();
+
+  const total = Number(row?.total ?? 0);
+  if (total === 0) return null;
+  return Math.round((Number(row?.passed ?? 0) / total) * 1000) / 10;
+}
+
 // B4.1 — competency-level pre/post breakdown across the whole cohort
 // (distinct from assessmentService's per-learner breakdown).
 export async function getCompetencyBreakdown(cohortId: string, frameworkId: string) {

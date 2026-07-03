@@ -20,6 +20,15 @@ type LearnerRow = {
   pre_score: string | null;
   post_score: string | null;
 };
+type DashboardAnalytics = {
+  mean_gain: number | null;
+  mean_pre_score: number | null;
+  mean_post_score: number | null;
+  n_learners: number;
+  cohens_d: number | null;
+  pass_rate: number | null;
+  competency_breakdown: Array<{ area_id: string; area_name: string; pre_pct: number | null; post_pct: number | null }>;
+};
 
 // Local dev origin for the learner-facing app. In production this would be
 // the real app.daprova.com/assess/{token} host from the spec (US-06).
@@ -40,6 +49,14 @@ export default function CohortDashboardPage() {
   const { data: learners } = useQuery<LearnerRow[]>({
     queryKey: ['cohort-learners', id],
     queryFn: () => apiFetch(`/api/v1/cohorts/${id}/learners`),
+    refetchInterval: 5000,
+  });
+  // US-11: mean pre/post/gain, pass rate, and competency breakdown for the
+  // full cohort dashboard — separate from the completion-count stats above,
+  // which come from the lighter-weight /cohorts/:id endpoint.
+  const { data: analytics } = useQuery<DashboardAnalytics>({
+    queryKey: ['cohort-dashboard', id],
+    queryFn: () => apiFetch(`/api/v1/cohorts/${id}/dashboard`),
     refetchInterval: 5000,
   });
 
@@ -75,6 +92,31 @@ export default function CohortDashboardPage() {
         <Stat label="Post completed" value={`${cohort.post_completed} (${postPct}%)`} />
         <Stat label="Missing (not yet post)" value={missing} />
       </div>
+
+      {analytics && analytics.n_learners > 0 && (
+        <>
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <Stat label="Mean pre score" value={analytics.mean_pre_score !== null ? `${analytics.mean_pre_score}%` : '—'} />
+            <Stat label="Mean post score" value={analytics.mean_post_score !== null ? `${analytics.mean_post_score}%` : '—'} />
+            <Stat label="Mean gain" value={analytics.mean_gain !== null ? `${analytics.mean_gain >= 0 ? '+' : ''}${analytics.mean_gain} pts` : '—'} />
+            <Stat label="Pass rate" value={analytics.pass_rate !== null ? `${analytics.pass_rate}%` : '—'} />
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 className="font-medium text-slate-900 mb-3">Competency breakdown</h3>
+            <div className="space-y-2">
+              {analytics.competency_breakdown.map((area) => (
+                <div key={area.area_id} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700">{area.area_name}</span>
+                  <span className="text-slate-500">
+                    {area.pre_pct !== null ? `${area.pre_pct}%` : '—'} → {area.post_pct !== null ? `${area.post_pct}%` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full text-sm">

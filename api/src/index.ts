@@ -9,6 +9,7 @@ import { frameworksRouter } from './routes/frameworks.js';
 import { coursesRouter } from './routes/courses.js';
 import { cohortsRouter } from './routes/cohorts.js';
 import { assessRouter } from './routes/assess.js';
+import { webhooksRouter } from './routes/webhooks.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 
@@ -32,6 +33,7 @@ app.use('/api/v1/frameworks', adminLimiter, frameworksRouter);
 app.use('/api/v1/courses', adminLimiter, coursesRouter);
 app.use('/api/v1/cohorts', adminLimiter, cohortsRouter);
 app.use('/api/v1/assess', publicLimiter, assessRouter);
+app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
 
 app.use(errorHandler);
 

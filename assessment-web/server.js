@@ -15,26 +15,29 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 
 const server = http.createServer((req, res) => {
-  let urlPath = req.url.split('?')[0];
-  const isAssetRequest = /\.(js|css|json|ico)$/.test(urlPath);
+  const urlPath = req.url.split('?')[0];
+  const directPath = path.join(__dirname, urlPath);
 
-  let filePath;
-  if (isAssetRequest) {
-    filePath = path.join(__dirname, urlPath);
-  } else {
-    // Anything else (/, /assess/abc123, /assess/abc123/) serves the SPA shell.
-    filePath = path.join(__dirname, 'index.html');
-  }
-
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404);
-      res.end('Not found');
+  // Serve a real file if one exists at this exact path (e.g. /teachable-stub.html,
+  // /style.css, /app.js). Only fall back to the SPA shell (index.html) for
+  // paths that don't correspond to an actual file — that's what makes
+  // /assess/:token work (the token isn't a file, so it hits the fallback).
+  fs.readFile(directPath, (directErr, directData) => {
+    if (!directErr) {
+      const ext = path.extname(directPath);
+      res.writeHead(200, { 'Content-Type': MIME[ext] ?? 'application/octet-stream' });
+      res.end(directData);
       return;
     }
-    const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] ?? 'application/octet-stream' });
-    res.end(data);
+    fs.readFile(path.join(__dirname, 'index.html'), (fallbackErr, fallbackData) => {
+      if (fallbackErr) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fallbackData);
+    });
   });
 });
 

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Skills Bootcamp — Teachable (stub)</title>
+    <style>
+      /* Deliberately styled to look like a generic course-platform page, not
+         a Daprova page — this simulates the *Teachable* side of the
+         integration (B6.1), which we can't test against a real Teachable
+         account per the agreed MVP scope. Standing in for: "admin pastes the
+         Daprova link into a Teachable course page as a button or course
+         description text" (step 2). */
+      body { font-family: Georgia, 'Times New Roman', serif; background: #fdfdfd; color: #222; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+      .platform-banner { background: #1a1a2e; color: #fff; padding: 10px 20px; margin: -1px -20px 30px; font-family: Arial, sans-serif; font-size: 0.85rem; }
+      h1 { font-size: 1.6rem; }
+      .lesson-nav { color: #888; font-size: 0.85rem; margin-bottom: 24px; }
+      .cta-button { display: inline-block; background: #2d6a4f; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 4px; font-family: Arial, sans-serif; font-weight: bold; margin: 20px 0; }
+      .cta-button:hover { background: #1b4332; }
+      .note { font-size: 0.8rem; color: #999; margin-top: 40px; border-top: 1px solid #eee; padding-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="platform-banner">Course Platform (stub) — Digital Skills Bootcamp</div>
+    <p class="lesson-nav">Course &gt; Module 1: Getting Started &gt; Lesson 1.1</p>
+    <h1>Welcome to the Digital Skills Bootcamp!</h1>
+    <p>
+      Before we begin, please complete a short pre-assessment. It takes about 10 minutes and helps us
+      understand your starting point so we can measure how much you improve by the end of the program.
+    </p>
+    <a class="cta-button" href="PRE_ASSESSMENT_LINK" target="_blank" rel="noopener">Start Pre-Assessment &rarr;</a>
+    <p>
+      Once you've completed the assessment, come back here and continue to Lesson 1.2 to start the course
+      material.
+    </p>
+    <p class="note">
+      This is a stand-in for a real Teachable course page (no Teachable account was available for this
+      build) — replace <code>PRE_ASSESSMENT_LINK</code> with an actual cohort's pre-assessment link, e.g.
+      from the admin dashboard's "Copy link" button, to click through the real flow.
+    </p>
+  </body>
+</html>

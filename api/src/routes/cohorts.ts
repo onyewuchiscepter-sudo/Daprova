@@ -62,12 +62,14 @@ cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
 cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
   try {
     const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
-    const [gains, effectSize, competencyBreakdown] = await Promise.all([
+    const passThreshold = Number(cohort.pass_threshold);
+    const [gains, effectSize, competencyBreakdown, passRate] = await Promise.all([
       analyticsService.getMeanGain(cohort.id),
       analyticsService.getCohensD(cohort.id),
       analyticsService.getCompetencyBreakdown(cohort.id, cohort.framework_id),
+      analyticsService.getPassRate(cohort.id, passThreshold),
     ]);
-    res.json({ ...gains, cohens_d: effectSize.cohens_d, pass_threshold: Number(cohort.pass_threshold), competency_breakdown: competencyBreakdown });
+    res.json({ ...gains, cohens_d: effectSize.cohens_d, pass_threshold: passThreshold, pass_rate: passRate, competency_breakdown: competencyBreakdown });
   } catch (err) {
     next(err);
   }
