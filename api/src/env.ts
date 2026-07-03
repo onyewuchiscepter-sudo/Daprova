@@ -6,14 +6,31 @@ function required(name: string, fallback?: string): string {
   return v;
 }
 
+const DEV_SESSION_SECRET = 'dev-insecure-session-secret-change-me';
+const DEV_REFRESH_SECRET = 'dev-insecure-refresh-secret-change-me';
+
 export const env = {
   port: Number(process.env.PORT ?? 4001),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   databaseUrl: required('DATABASE_URL', 'postgres://postgres:postgres@localhost:5432/daprova_dev'),
-  sessionJwtSecret: required('SESSION_JWT_SECRET', 'dev-insecure-session-secret-change-me'),
-  refreshJwtSecret: required('REFRESH_JWT_SECRET', 'dev-insecure-refresh-secret-change-me'),
+  sessionJwtSecret: required('SESSION_JWT_SECRET', DEV_SESSION_SECRET),
+  refreshJwtSecret: required('REFRESH_JWT_SECRET', DEV_REFRESH_SECRET),
   firebaseProjectId: required('FIREBASE_PROJECT_ID', 'daprova-dev'),
-  firebaseAuthEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099',
+  // Set only for local dev — its presence is what switches auth verification
+  // between the emulator's lenient REST lookup and real JWKS-based JWT
+  // verification (see lib/firebaseAdmin.ts). Must be unset in production.
+  firebaseAuthEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST,
   adminDashboardOrigin: process.env.ADMIN_DASHBOARD_ORIGIN ?? 'http://localhost:5173',
   assessmentWebOrigin: process.env.ASSESSMENT_WEB_ORIGIN ?? 'http://localhost:5174',
 };
+
+// Fail fast rather than silently run production traffic on known dev secrets
+// or against the emulator.
+if (env.nodeEnv === 'production') {
+  if (env.sessionJwtSecret === DEV_SESSION_SECRET || env.refreshJwtSecret === DEV_REFRESH_SECRET) {
+    throw new Error('Refusing to start in production with default dev JWT secrets — set SESSION_JWT_SECRET and REFRESH_JWT_SECRET.');
+  }
+  if (env.firebaseAuthEmulatorHost) {
+    throw new Error('FIREBASE_AUTH_EMULATOR_HOST must not be set in production.');
+  }
+}
