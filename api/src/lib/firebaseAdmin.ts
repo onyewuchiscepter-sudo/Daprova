@@ -38,14 +38,18 @@ export const firebaseAuth = {
     return { uid: user.localId, email: user.email };
   },
 
-  async getUserByEmail(email: string): Promise<{ uid: string; email?: string }> {
-    const data = await callIdentityToolkit<{ users?: Array<{ localId: string; email?: string }> }>(
-      '/accounts:lookup',
-      { email: [email] },
-    );
-    const user = data.users?.[0];
-    if (!user) throw new Error('User not found');
-    return { uid: user.localId, email: user.email };
+  // Looking a user up by email alone (no password/idToken) is an admin-only
+  // operation even against the emulator — accounts:lookup rejects it with
+  // MISSING_ID_TOKEN unauthenticated. signInWithPassword is the one
+  // unauthenticated endpoint that returns a uid for an existing user, so
+  // that's what callers needing "does this user already exist" use instead.
+  async signInWithPassword(email: string, password: string): Promise<{ uid: string }> {
+    const data = await callIdentityToolkit<{ localId: string }>('/accounts:signInWithPassword', {
+      email,
+      password,
+      returnSecureToken: true,
+    });
+    return { uid: data.localId };
   },
 
   async createUser(opts: { email: string; password: string; emailVerified?: boolean }): Promise<{ uid: string }> {

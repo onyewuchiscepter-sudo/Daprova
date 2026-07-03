@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { healthRouter } from './routes/health.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { frameworksRouter } from './routes/frameworks.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 
@@ -24,6 +25,7 @@ app.use(healthRouter);
 // Public/no-auth assessment endpoints will mount under /api/v1/assess with publicLimiter (added in S3).
 app.use('/api/v1/auth', publicLimiter, authRouter);
 app.use('/api/v1', adminLimiter, orgRouter);
+app.use('/api/v1/frameworks', adminLimiter, frameworksRouter);
 
 app.use(errorHandler);
 
