@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts up",
     "migrate:down": "tsx src/db/migrate.ts down",
-    "seed": "tsx src/db/seed/run.ts"
+    "seed": "tsx src/db/seed/run.ts",
+    "seed:synthetic": "tsx src/db/seed/syntheticDataset.ts"
   },
   "dependencies": {
     "@daprova/shared": "*",

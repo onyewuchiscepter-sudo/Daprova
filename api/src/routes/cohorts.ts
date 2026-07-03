@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { badRequest } from '../lib/errors.js';
 import * as cohortService from '../services/cohortService.js';
+import * as analyticsService from '../services/analyticsService.js';
+import * as dataQualityService from '../services/dataQualityService.js';
 
 export const cohortsRouter = Router();
 cohortsRouter.use(requireAuth, requireRole('admin'));
@@ -50,6 +52,47 @@ cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
   try {
     const body = parse(regenerateLinkSchema, req.body);
     res.json(await cohortService.regenerateLinkToken(req.auth!.org_id, req.params.id, body.type));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/cohorts/:id/dashboard — B3.5's "full cohort analytics dashboard
+// data": mean gain, Cohen's d, and the competency-level breakdown together.
+cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
+  try {
+    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const [gains, effectSize, competencyBreakdown] = await Promise.all([
+      analyticsService.getMeanGain(cohort.id),
+      analyticsService.getCohensD(cohort.id),
+      analyticsService.getCompetencyBreakdown(cohort.id, cohort.framework_id),
+    ]);
+    res.json({ ...gains, cohens_d: effectSize.cohens_d, pass_threshold: Number(cohort.pass_threshold), competency_breakdown: competencyBreakdown });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/cohorts/:id/equity — Module 3, all four demographic dimensions
+// in one response rather than one call per dimension.
+cohortsRouter.get('/:id/equity', async (req, res, next) => {
+  try {
+    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const dimensions = ['gender', 'age_group', 'location_type', 'disability'] as const;
+    const breakdowns = await Promise.all(dimensions.map((d) => analyticsService.getEquityBreakdown(cohort.id, d)));
+    res.json(breakdowns);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/cohorts/:id/run-outlier-detection — admin-triggered stand-in
+// for the spec's "background job after cohort closes" (no task-queue infra
+// in this MVP to schedule it automatically).
+cohortsRouter.post('/:id/run-outlier-detection', async (req, res, next) => {
+  try {
+    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    res.json(await dataQualityService.runOutlierDetection(cohort.id));
   } catch (err) {
     next(err);
   }
