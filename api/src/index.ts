@@ -12,6 +12,7 @@ import { assessRouter } from './routes/assess.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
+import { runMigrationsToLatest } from './db/migrate.js';
 
 const app = express();
 
@@ -37,6 +38,18 @@ app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
 
 app.use(errorHandler);
 
-app.listen(env.port, () => {
-  console.log(`[daprova-api] listening on http://localhost:${env.port}`);
-});
+// Applying pending migrations on boot means schema changes ship with the
+// deploy itself instead of needing a separate manual step against whatever's
+// hosting the database. Fine for a single-instance deployment like this one;
+// would need a separate migration step (not on every instance's boot) if this
+// ever scaled to multiple concurrent API instances.
+runMigrationsToLatest()
+  .then(() => {
+    app.listen(env.port, () => {
+      console.log(`[daprova-api] listening on http://localhost:${env.port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('[daprova-api] migration failed, refusing to start', err);
+    process.exit(1);
+  });
