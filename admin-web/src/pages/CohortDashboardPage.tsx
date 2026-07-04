@@ -30,9 +30,10 @@ type DashboardAnalytics = {
   competency_breakdown: Array<{ area_id: string; area_name: string; pre_pct: number | null; post_pct: number | null }>;
 };
 
-// Local dev origin for the learner-facing app. In production this would be
-// the real app.daprova.com/assess/{token} host from the spec (US-06).
-const ASSESSMENT_WEB_ORIGIN = 'http://localhost:5174';
+// Falls back to localhost for dev; set VITE_ASSESSMENT_WEB_ORIGIN at build
+// time to the real deployed assessment-web URL (or eventually
+// app.daprova.com per the spec, US-06) in production.
+const ASSESSMENT_WEB_ORIGIN = import.meta.env.VITE_ASSESSMENT_WEB_ORIGIN ?? 'http://localhost:5174';
 
 export default function CohortDashboardPage() {
   const { id } = useParams<{ id: string }>();
