@@ -10,6 +10,7 @@ import { coursesRouter } from './routes/courses.js';
 import { cohortsRouter } from './routes/cohorts.js';
 import { assessRouter } from './routes/assess.js';
 import { webhooksRouter } from './routes/webhooks.js';
+import { bootstrapRouter } from './routes/bootstrap.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 import { runMigrationsToLatest } from './db/migrate.js';
@@ -35,6 +36,7 @@ app.use('/api/v1/courses', adminLimiter, coursesRouter);
 app.use('/api/v1/cohorts', adminLimiter, cohortsRouter);
 app.use('/api/v1/assess', publicLimiter, assessRouter);
 app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
+app.use('/api/v1/bootstrap', publicLimiter, bootstrapRouter);
 
 app.use(errorHandler);
 

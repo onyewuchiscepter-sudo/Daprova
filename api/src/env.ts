@@ -22,6 +22,12 @@ export const env = {
   firebaseAuthEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST,
   adminDashboardOrigin: process.env.ADMIN_DASHBOARD_ORIGIN ?? 'http://localhost:5173',
   assessmentWebOrigin: process.env.ASSESSMENT_WEB_ORIGIN ?? 'http://localhost:5174',
+  // Gates POST /api/v1/bootstrap (routes/bootstrap.ts) — a one-time endpoint
+  // for provisioning the first org+admin user in a freshly deployed
+  // environment with no direct DB access. Unset entirely (the default) means
+  // the route always 404s; it also self-disables once any organisation
+  // exists, so it can't function as a standing backdoor either way.
+  bootstrapSecret: process.env.BOOTSTRAP_SECRET,
 };
 
 // Fail fast rather than silently run production traffic on known dev secrets
