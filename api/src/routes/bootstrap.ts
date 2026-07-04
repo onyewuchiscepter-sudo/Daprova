@@ -3,8 +3,30 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js';
+import { seedFrameworkTemplates } from '../db/seed/frameworks.js';
 
 export const bootstrapRouter = Router();
+
+// POST /api/v1/bootstrap/templates — seeds the 6 competency framework
+// templates (reuses the exact same seeding logic as the local dev seed
+// script). Unlike the org bootstrap below, this is safe to call more than
+// once: seedFrameworkTemplates() already skips any template that exists.
+// Same secret gate as the rest of this router.
+bootstrapRouter.post('/templates', async (req, res, next) => {
+  try {
+    if (!env.bootstrapSecret) throw notFound();
+    const header = req.headers.authorization;
+    if (header !== `Bearer ${env.bootstrapSecret}`) throw forbidden();
+
+    const before = await db.selectFrom('competency_frameworks').select('id').where('is_template', '=', true).execute();
+    await seedFrameworkTemplates();
+    const after = await db.selectFrom('competency_frameworks').select('id').where('is_template', '=', true).execute();
+
+    res.json({ templates_before: before.length, templates_after: after.length });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // One-time provisioning for the first org + admin user in an environment
 // with no direct database access (see env.ts for the full rationale).
