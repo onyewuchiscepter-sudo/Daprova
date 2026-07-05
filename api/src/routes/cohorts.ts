@@ -57,17 +57,27 @@ cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
   }
 });
 
+const dashboardFiltersSchema = z.object({
+  gender: z.string().optional(),
+  age_group: z.string().optional(),
+  location_type: z.string().optional(),
+  disability: z.string().optional(),
+});
+
 // GET /api/v1/cohorts/:id/dashboard — B3.5's "full cohort analytics dashboard
 // data": mean gain, Cohen's d, and the competency-level breakdown together.
+// US-13: accepts the same 4 demographic filters (compound, all optional) so
+// applying a filter updates every metric here simultaneously.
 cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
   try {
     const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const filters = parse(dashboardFiltersSchema, req.query);
     const passThreshold = Number(cohort.pass_threshold);
     const [gains, effectSize, competencyBreakdown, passRate] = await Promise.all([
-      analyticsService.getMeanGain(cohort.id),
-      analyticsService.getCohensD(cohort.id),
-      analyticsService.getCompetencyBreakdown(cohort.id, cohort.framework_id),
-      analyticsService.getPassRate(cohort.id, passThreshold),
+      analyticsService.getMeanGain(cohort.id, filters),
+      analyticsService.getCohensD(cohort.id, filters),
+      analyticsService.getCompetencyBreakdown(cohort.id, cohort.framework_id, filters),
+      analyticsService.getPassRate(cohort.id, passThreshold, filters),
     ]);
     res.json({ ...gains, cohens_d: effectSize.cohens_d, pass_threshold: passThreshold, pass_rate: passRate, competency_breakdown: competencyBreakdown });
   } catch (err) {
