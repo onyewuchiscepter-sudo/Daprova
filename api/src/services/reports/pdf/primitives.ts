@@ -113,9 +113,4 @@ export function drawTable(doc: PDFKit.PDFDocument, headers: string[], rows: stri
   doc.moveDown(0.8);
 }
 
-export function formatPct(v: number | null): string {
-  return v === null ? '—' : `${v}%`;
-}
-export function formatSigned(v: number | null, suffix = ''): string {
-  return v === null ? '—' : `${v >= 0 ? '+' : ''}${v}${suffix}`;
-}
+export { formatPct, formatSigned } from '../format.js';
