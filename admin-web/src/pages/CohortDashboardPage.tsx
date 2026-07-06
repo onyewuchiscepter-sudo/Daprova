@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { apiFetch } from '../api';
+import { apiFetch, apiFetchBlob } from '../api';
 
 type Cohort = {
   id: string;
@@ -45,6 +45,9 @@ type EquityGroup = {
   small_sample: boolean;
 };
 type EquityBreakdown = { dimension: string; groups: EquityGroup[] };
+type ReportTemplate = { key: string; label: string };
+type NarrativeFields = { background: string; challenges: string; next_steps: string };
+type ReportRecord = { id: string; funder_template: string; narrative_json: NarrativeFields; status: string; generated_at: string };
 
 // Falls back to localhost for dev; set VITE_ASSESSMENT_WEB_ORIGIN at build
 // time to the real deployed assessment-web URL (or eventually
@@ -81,7 +84,7 @@ const DIMENSION_LABEL: Record<string, string> = { gender: 'Gender', age_group: '
 export default function CohortDashboardPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'overview' | 'equity'>('overview');
+  const [tab, setTab] = useState<'overview' | 'equity' | 'reports'>('overview');
 
   // FR-M3-05: filter state lives in URL params so it survives a refresh.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -131,11 +134,66 @@ export default function CohortDashboardPage() {
     enabled: tab === 'equity',
   });
 
+  // Module 4: funder report generation. Templates rarely change, so no
+  // polling; the report history refetches after generate/regenerate via
+  // query invalidation instead.
+  const { data: templates } = useQuery<ReportTemplate[]>({
+    queryKey: ['report-templates'],
+    queryFn: () => apiFetch('/api/v1/reports/templates'),
+    enabled: tab === 'reports',
+    staleTime: Infinity,
+  });
+  const { data: reports } = useQuery<ReportRecord[]>({
+    queryKey: ['cohort-reports', id],
+    queryFn: () => apiFetch(`/api/v1/cohorts/${id}/reports`),
+    enabled: tab === 'reports',
+  });
+
   const regenerateMutation = useMutation({
     mutationFn: (type: 'pre' | 'post') =>
       apiFetch(`/api/v1/cohorts/${id}/regenerate-link`, { method: 'POST', body: JSON.stringify({ type }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
+
+  const [reportForm, setReportForm] = useState<NarrativeFields>({ background: '', challenges: '', next_steps: '' });
+  const [reportTemplate, setReportTemplate] = useState('');
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+
+  const generateReportMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/cohorts/${id}/reports`, { method: 'POST', body: JSON.stringify({ template: reportTemplate, narrative: reportForm }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cohort-reports', id] });
+      setReportForm({ background: '', challenges: '', next_steps: '' });
+      setReportTemplate('');
+    },
+  });
+  const regenerateReportMutation = useMutation({
+    mutationFn: (reportId: string) => apiFetch(`/api/v1/reports/${reportId}/narrative`, { method: 'PATCH', body: JSON.stringify({ narrative: reportForm }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cohort-reports', id] });
+      setEditingReportId(null);
+      setReportForm({ background: '', challenges: '', next_steps: '' });
+    },
+  });
+
+  function startEditingReport(report: ReportRecord) {
+    setEditingReportId(report.id);
+    setReportForm(report.narrative_json);
+  }
+  function cancelEditingReport() {
+    setEditingReportId(null);
+    setReportForm({ background: '', challenges: '', next_steps: '' });
+  }
+
+  async function downloadReport(reportId: string, format: 'pdf' | 'docx') {
+    const blob = await apiFetchBlob(`/api/v1/reports/${reportId}/download/${format}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${reportId}.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   function copyLink(token: string) {
     navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/assess/${token}`);
@@ -168,7 +226,7 @@ export default function CohortDashboardPage() {
 
       {/* FR-M3-04: equity view lives as a tab within this same dashboard. */}
       <div className="flex gap-4 border-b mb-6">
-        {(['overview', 'equity'] as const).map((t) => (
+        {(['overview', 'equity', 'reports'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -181,31 +239,33 @@ export default function CohortDashboardPage() {
 
       {/* US-13: compound demographic filters — applying any of them updates
           the Overview tab's stats, competency breakdown, and learner table
-          together via the same query. */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-end gap-3">
-        {FILTER_DIMENSIONS.map((dim) => (
-          <label key={dim} className="text-xs text-slate-500">
-            {DIMENSION_LABEL[dim]}
-            <select
-              className="mt-1 block border rounded px-2 py-1.5 text-sm text-slate-700"
-              value={filters[dim] ?? ''}
-              onChange={(e) => setFilter(dim, e.target.value)}
-            >
-              <option value="">All</option>
-              {FILTER_OPTIONS[dim].map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-        {hasFilters && (
-          <button onClick={clearFilters} className="text-xs text-slate-500 underline pb-1.5">
-            Clear filters
-          </button>
-        )}
-      </div>
+          together via the same query. Not applicable to the Reports tab. */}
+      {tab !== 'reports' && (
+        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-end gap-3">
+          {FILTER_DIMENSIONS.map((dim) => (
+            <label key={dim} className="text-xs text-slate-500">
+              {DIMENSION_LABEL[dim]}
+              <select
+                className="mt-1 block border rounded px-2 py-1.5 text-sm text-slate-700"
+                value={filters[dim] ?? ''}
+                onChange={(e) => setFilter(dim, e.target.value)}
+              >
+                <option value="">All</option>
+                {FILTER_OPTIONS[dim].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {hasFilters && (
+            <button onClick={clearFilters} className="text-xs text-slate-500 underline pb-1.5">
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
 
       {tab === 'overview' && (
         <>
@@ -325,6 +385,128 @@ export default function CohortDashboardPage() {
               </table>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'reports' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-5">
+            <h3 className="font-medium text-slate-900 mb-3">{editingReportId ? 'Edit narrative & regenerate' : 'Generate a new report'}</h3>
+            <div className="space-y-3">
+              {!editingReportId && (
+                <label className="block text-xs text-slate-500">
+                  Funder template
+                  <select
+                    className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                    value={reportTemplate}
+                    onChange={(e) => setReportTemplate(e.target.value)}
+                  >
+                    <option value="">Select a template…</option>
+                    {templates?.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="block text-xs text-slate-500">
+                Background / theory of change
+                <textarea
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  rows={2}
+                  value={reportForm.background}
+                  onChange={(e) => setReportForm({ ...reportForm, background: e.target.value })}
+                />
+              </label>
+              <label className="block text-xs text-slate-500">
+                Challenges
+                <textarea
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  rows={2}
+                  value={reportForm.challenges}
+                  onChange={(e) => setReportForm({ ...reportForm, challenges: e.target.value })}
+                />
+              </label>
+              <label className="block text-xs text-slate-500">
+                Next steps
+                <textarea
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  rows={2}
+                  value={reportForm.next_steps}
+                  onChange={(e) => setReportForm({ ...reportForm, next_steps: e.target.value })}
+                />
+              </label>
+              <div className="flex gap-2">
+                {editingReportId ? (
+                  <>
+                    <button
+                      onClick={() => regenerateReportMutation.mutate(editingReportId)}
+                      disabled={regenerateReportMutation.isPending}
+                      className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {regenerateReportMutation.isPending ? 'Regenerating…' : 'Save & regenerate'}
+                    </button>
+                    <button onClick={cancelEditingReport} className="text-sm border rounded px-3 py-1.5">
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => generateReportMutation.mutate()}
+                    disabled={!reportTemplate || generateReportMutation.isPending}
+                    className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {generateReportMutation.isPending ? 'Generating…' : 'Generate report'}
+                  </button>
+                )}
+              </div>
+              {generateReportMutation.isError && <p className="text-xs text-red-600">{(generateReportMutation.error as Error).message}</p>}
+              {regenerateReportMutation.isError && <p className="text-xs text-red-600">{(regenerateReportMutation.error as Error).message}</p>}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-slate-500">
+                <tr>
+                  <th className="p-3">Template</th>
+                  <th className="p-3">Generated</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {reports?.map((r) => (
+                  <tr key={r.id}>
+                    <td className="p-3">{templates?.find((t) => t.key === r.funder_template)?.label ?? r.funder_template}</td>
+                    <td className="p-3 text-slate-500">{new Date(r.generated_at).toLocaleString()}</td>
+                    <td className="p-3 capitalize">{r.status}</td>
+                    <td className="p-3">
+                      <div className="flex gap-3">
+                        <button onClick={() => downloadReport(r.id, 'pdf')} className="text-xs text-slate-700 underline">
+                          PDF
+                        </button>
+                        <button onClick={() => downloadReport(r.id, 'docx')} className="text-xs text-slate-700 underline">
+                          Word
+                        </button>
+                        <button onClick={() => startEditingReport(r)} className="text-xs text-slate-700 underline">
+                          Edit & regenerate
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {reports?.length === 0 && (
+                  <tr>
+                    <td className="p-3 text-slate-500" colSpan={4}>
+                      No reports generated yet for this cohort.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
