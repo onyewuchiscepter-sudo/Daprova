@@ -177,8 +177,8 @@ export interface CohortReportsTable {
   generated_by: string | null;
   funder_template: string;
   narrative_json: unknown | null;
-  pdf_s3_key: string | null;
-  docx_s3_key: string | null;
+  pdf_data: Buffer | null;
+  docx_data: Buffer | null;
   status: Generated<string>;
   generated_at: Generated<Timestamp>;
 }
