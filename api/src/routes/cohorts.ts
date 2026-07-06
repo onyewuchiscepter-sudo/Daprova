@@ -6,6 +6,8 @@ import { badRequest } from '../lib/errors.js';
 import * as cohortService from '../services/cohortService.js';
 import * as analyticsService from '../services/analyticsService.js';
 import * as dataQualityService from '../services/dataQualityService.js';
+import * as reportService from '../services/reportService.js';
+import { isFunderTemplateKey } from '../services/reports/templateRegistry.js';
 
 export const cohortsRouter = Router();
 cohortsRouter.use(requireAuth, requireRole('admin'));
@@ -93,6 +95,32 @@ cohortsRouter.get('/:id/equity', async (req, res, next) => {
     const dimensions = ['gender', 'age_group', 'location_type', 'disability'] as const;
     const breakdowns = await Promise.all(dimensions.map((d) => analyticsService.getEquityBreakdown(cohort.id, d)));
     res.json(breakdowns);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const generateReportSchema = z.object({
+  template: z.string().refine(isFunderTemplateKey, 'Unknown funder template'),
+  narrative: z.object({
+    background: z.string().default(''),
+    challenges: z.string().default(''),
+    next_steps: z.string().default(''),
+  }),
+});
+cohortsRouter.post('/:id/reports', async (req, res, next) => {
+  try {
+    const body = generateReportSchema.parse(req.body);
+    const report = await reportService.generateReport(req.auth!.org_id, req.params.id, body.template, body.narrative, req.auth!.sub);
+    res.status(201).json(report);
+  } catch (err) {
+    next(err instanceof z.ZodError ? badRequest('Invalid request body', err.flatten()) : err);
+  }
+});
+
+cohortsRouter.get('/:id/reports', async (req, res, next) => {
+  try {
+    res.json(await reportService.listReports(req.auth!.org_id, req.params.id));
   } catch (err) {
     next(err);
   }

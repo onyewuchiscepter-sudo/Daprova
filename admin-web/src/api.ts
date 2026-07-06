@@ -23,3 +23,16 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   if (res.status === 204) return null;
   return res.json();
 }
+
+// For binary responses (report PDF/DOCX downloads) — same auth header
+// handling as apiFetch, but returns the raw Blob instead of parsing JSON.
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  if (sessionToken) headers.set('Authorization', `Bearer ${sessionToken}`);
+  const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message ?? `Request failed: ${res.status}`);
+  }
+  return res.blob();
+}

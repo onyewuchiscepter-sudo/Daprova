@@ -224,3 +224,24 @@ export async function getEquityBreakdown(cohortId: string, dimension: EquityDime
     }),
   };
 }
+
+// Cohort-wide (not per-subgroup) mean confidence rating pre/post. Used by the
+// Tony Elumelu Foundation report template as its "business readiness score"
+// proxy (spec: "confidence index used as business readiness proxy").
+export async function getMeanConfidence(cohortId: string) {
+  const row = await db
+    .selectFrom('confidence_ratings as cr')
+    .innerJoin('assessment_sessions as s', 's.id', 'cr.session_id')
+    .select([
+      sql<string>`round(avg(case when s.session_type = 'pre' then cr.rating end)::numeric, 2)`.as('mean_confidence_pre'),
+      sql<string>`round(avg(case when s.session_type = 'post' then cr.rating end)::numeric, 2)`.as('mean_confidence_post'),
+    ])
+    .where('s.cohort_id', '=', cohortId)
+    .where('s.status', '=', 'completed')
+    .executeTakeFirst();
+
+  return {
+    mean_confidence_pre: row?.mean_confidence_pre !== null && row?.mean_confidence_pre !== undefined ? Number(row.mean_confidence_pre) : null,
+    mean_confidence_post: row?.mean_confidence_post !== null && row?.mean_confidence_post !== undefined ? Number(row.mean_confidence_post) : null,
+  };
+}
