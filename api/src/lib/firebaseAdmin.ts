@@ -15,10 +15,15 @@ import { env } from '../env.js';
 //   signature against Google's published JWKS and checks issuer/audience/
 //   expiry — the same checks firebase-admin does, without the heavy SDK.
 const EMULATOR_BASE = env.firebaseAuthEmulatorHost ? `http://${env.firebaseAuthEmulatorHost}/identitytoolkit.googleapis.com/v1` : null;
-const KEY = 'fake-api-key';
+const REAL_BASE = 'https://identitytoolkit.googleapis.com/v1';
+const EMULATOR_KEY = 'fake-api-key';
 
 async function callIdentityToolkit<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${EMULATOR_BASE}${path}?key=${KEY}`, {
+  const base = EMULATOR_BASE ?? REAL_BASE;
+  const key = EMULATOR_BASE ? EMULATOR_KEY : env.firebaseApiKey;
+  if (!key) throw new Error('FIREBASE_API_KEY is required to call Identity Toolkit against a real Firebase project');
+
+  const res = await fetch(`${base}${path}?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -50,17 +55,20 @@ export const firebaseAuth = {
     return { uid: user.localId, email: user.email };
   },
 
-  // Dev-only helpers used by the seed script to provision local test users —
-  // not called in production, where real users sign up through the actual
-  // Firebase-backed login UI.
+  // Dev-only — used by the seed script to provision local test users against
+  // the emulator. Not meaningful in production, where real users sign in
+  // through the actual Firebase-backed login UI.
   async signInWithPassword(email: string, password: string): Promise<{ uid: string }> {
     if (!EMULATOR_BASE) throw new Error('signInWithPassword is only available against the emulator');
     const data = await callIdentityToolkit<{ localId: string }>('/accounts:signInWithPassword', { email, password, returnSecureToken: true });
     return { uid: data.localId };
   },
 
+  // Used by the dev seed script (against the emulator) and by Model B's
+  // team-provisioned org creation (routes/platform.ts, against a real
+  // project) — the same public signUp REST call either way, just a
+  // different key/base URL depending on which `callIdentityToolkit` picks.
   async createUser(opts: { email: string; password: string; emailVerified?: boolean }): Promise<{ uid: string }> {
-    if (!EMULATOR_BASE) throw new Error('createUser is only available against the emulator');
     const data = await callIdentityToolkit<{ localId: string }>('/accounts:signUp', {
       email: opts.email,
       password: opts.password,

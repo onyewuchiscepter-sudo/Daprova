@@ -12,13 +12,14 @@ import { reportsRouter } from './routes/reports.js';
 import { assessRouter } from './routes/assess.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { bootstrapRouter } from './routes/bootstrap.js';
+import { platformRouter } from './routes/platform.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 import { runMigrationsToLatest } from './db/migrate.js';
 
 const app = express();
 
-const allowedOrigins = new Set([env.adminDashboardOrigin, env.assessmentWebOrigin]);
+const allowedOrigins = new Set([env.adminDashboardOrigin, env.assessmentWebOrigin, env.platformWebOrigin]);
 app.use(
   cors({
     origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
@@ -39,6 +40,7 @@ app.use('/api/v1/reports', adminLimiter, reportsRouter);
 app.use('/api/v1/assess', publicLimiter, assessRouter);
 app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
 app.use('/api/v1/bootstrap', publicLimiter, bootstrapRouter);
+app.use('/api/v1/platform', adminLimiter, platformRouter);
 
 app.use(errorHandler);
 

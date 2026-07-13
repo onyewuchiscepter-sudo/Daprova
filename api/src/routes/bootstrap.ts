@@ -83,3 +83,48 @@ bootstrapRouter.post('/', async (req, res, next) => {
     next(err);
   }
 });
+
+// POST /api/v1/bootstrap/platform-admin — grants platform-admin status
+// (docs/org-onboarding-spec.md §7.1) to an existing person by email. Solves
+// the same bootstrapping problem the org-bootstrap above solves for the
+// first org admin: granting platform-admin is normally an owner-only
+// platform action, but there's no platform admin yet to grant the first
+// one. Unlike the one-time org bootstrap, this is safe to call repeatedly
+// (upserts the role) — same secret gate as the rest of this router.
+const bootstrapPlatformAdminSchema = z.object({
+  person_email: z.string().email(),
+  platform_role: z.enum(['support', 'owner']),
+});
+
+bootstrapRouter.post('/platform-admin', async (req, res, next) => {
+  try {
+    if (!env.bootstrapSecret) throw notFound();
+    const header = req.headers.authorization;
+    if (header !== `Bearer ${env.bootstrapSecret}`) throw forbidden();
+
+    const body = bootstrapPlatformAdminSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    const data = body.data;
+
+    const person = await db.selectFrom('people').selectAll().where('email', '=', data.person_email).executeTakeFirst();
+    if (!person) throw notFound('No person with that email — they must sign in at least once first');
+
+    const existing = await db.selectFrom('platform_admins').selectAll().where('person_id', '=', person.id).executeTakeFirst();
+    const admin = existing
+      ? await db
+          .updateTable('platform_admins')
+          .set({ platform_role: data.platform_role })
+          .where('id', '=', existing.id)
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      : await db
+          .insertInto('platform_admins')
+          .values({ person_id: person.id, platform_role: data.platform_role })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+    res.status(existing ? 200 : 201).json({ person_id: person.id, email: person.email, platform_role: admin.platform_role });
+  } catch (err) {
+    next(err);
+  }
+});

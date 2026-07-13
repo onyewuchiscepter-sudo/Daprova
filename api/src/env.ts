@@ -20,8 +20,18 @@ export const env = {
   // between the emulator's lenient REST lookup and real JWKS-based JWT
   // verification (see lib/firebaseAdmin.ts). Must be unset in production.
   firebaseAuthEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST,
+  // The project's public Web API key (same value admin-web's
+  // VITE_FIREBASE_API_KEY uses) — not a service-account secret. Only needed
+  // server-side for Model B's "team creates an org admin directly" flow
+  // (routes/platform.ts), which calls the same public Identity Toolkit
+  // signUp REST endpoint the Firebase client SDK uses, rather than pulling
+  // in firebase-admin for this one capability.
+  firebaseApiKey: process.env.FIREBASE_API_KEY,
   adminDashboardOrigin: process.env.ADMIN_DASHBOARD_ORIGIN ?? 'http://localhost:5173',
   assessmentWebOrigin: process.env.ASSESSMENT_WEB_ORIGIN ?? 'http://localhost:5174',
+  // The internal platform-admin tool (platform-web) — a separate surface
+  // from the customer-facing admin-web, per docs/org-onboarding-spec.md §7.5.
+  platformWebOrigin: process.env.PLATFORM_WEB_ORIGIN ?? 'http://localhost:5175',
   // Gates POST /api/v1/bootstrap (routes/bootstrap.ts) — a one-time endpoint
   // for provisioning the first org+admin user in a freshly deployed
   // environment with no direct DB access. Unset entirely (the default) means

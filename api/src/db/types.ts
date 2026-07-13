@@ -192,10 +192,30 @@ export interface CohortReportsTable {
   generated_at: Generated<Timestamp>;
 }
 
+export interface PlatformAdminsTable {
+  id: Generated<string>;
+  person_id: string;
+  platform_role: string; // support | owner
+  granted_at: Generated<Timestamp>;
+  granted_by: string | null;
+}
+
+export interface AuditLogTable {
+  id: Generated<string>;
+  actor_person_id: string | null;
+  actor_context: string; // org_admin | platform_admin | impersonating
+  org_id: string | null;
+  action: string;
+  details: unknown | null;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
   org_memberships: OrgMembershipsTable;
+  platform_admins: PlatformAdminsTable;
+  audit_log: AuditLogTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;
