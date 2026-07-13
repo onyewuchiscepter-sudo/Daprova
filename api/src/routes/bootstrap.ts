@@ -61,20 +61,24 @@ bootstrapRouter.post('/', async (req, res, next) => {
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    const user = await db
-      .insertInto('users')
+    const person = await db
+      .insertInto('people')
       .values({
-        org_id: org.id,
         email: data.admin_email,
         display_name: data.admin_display_name ?? null,
-        role: 'admin',
         auth_provider: 'firebase',
         auth_uid: data.admin_auth_uid,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
 
-    res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug }, user: { id: user.id, email: user.email, role: user.role } });
+    const membership = await db
+      .insertInto('org_memberships')
+      .values({ person_id: person.id, org_id: org.id, role: 'admin' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug }, user: { id: person.id, email: person.email, role: membership.role } });
   } catch (err) {
     next(err);
   }

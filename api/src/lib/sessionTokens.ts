@@ -18,8 +18,8 @@ export function newRefreshJti(): string {
   return crypto.randomUUID();
 }
 
-export function signRefreshToken(userId: string, jti: string): string {
-  return jwt.sign({ sub: userId, jti }, env.refreshJwtSecret, { expiresIn: REFRESH_TTL_SECS });
+export function signRefreshToken(personId: string, jti: string): string {
+  return jwt.sign({ sub: personId, jti }, env.refreshJwtSecret, { expiresIn: REFRESH_TTL_SECS });
 }
 
 export function verifyRefreshToken(token: string): { sub: string; jti: string } {
@@ -27,3 +27,20 @@ export function verifyRefreshToken(token: string): { sub: string; jti: string } 
 }
 
 export const REFRESH_TOKEN_TTL_MS = REFRESH_TTL_SECS * 1000;
+
+// Bridges Firebase verification to org selection for a person who belongs
+// to more than one org (docs/org-onboarding-spec.md §2): proves "this
+// person already presented a valid Firebase ID token" without needing to
+// re-verify it, but deliberately carries no org context and expires in
+// minutes, not hours — it's a hop, not a session.
+const ORG_SELECTION_TTL = '5m';
+
+export function signOrgSelectionToken(personId: string): string {
+  return jwt.sign({ sub: personId, purpose: 'org_selection' }, env.sessionJwtSecret, { expiresIn: ORG_SELECTION_TTL });
+}
+
+export function verifyOrgSelectionToken(token: string): { sub: string } {
+  const payload = jwt.verify(token, env.sessionJwtSecret) as { sub: string; purpose: string };
+  if (payload.purpose !== 'org_selection') throw new Error('Not an org-selection token');
+  return { sub: payload.sub };
+}

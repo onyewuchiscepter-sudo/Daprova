@@ -9,8 +9,8 @@ export type ApiError = {
 };
 
 export type SessionClaims = {
-  sub: string; // users.id
-  org_id: string;
+  sub: string; // people.id
+  org_id: string; // the org this session is scoped to (a person may belong to more than one)
   role: Role;
 };
 

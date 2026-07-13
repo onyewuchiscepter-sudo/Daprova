@@ -35,7 +35,12 @@ function weightedChoice<T extends string>(weights: Array<[T, number]>): T {
 
 async function main() {
   const org = await db.selectFrom('organisations').selectAll().where('slug', '=', 'acme-edtech-dev').executeTakeFirstOrThrow();
-  const adminUser = await db.selectFrom('users').selectAll().where('org_id', '=', org.id).where('role', '=', 'admin').executeTakeFirstOrThrow();
+  const adminMembership = await db
+    .selectFrom('org_memberships')
+    .selectAll()
+    .where('org_id', '=', org.id)
+    .where('role', '=', 'admin')
+    .executeTakeFirstOrThrow();
   const template = await db
     .selectFrom('competency_frameworks')
     .selectAll()
@@ -46,7 +51,7 @@ async function main() {
   console.log('[synthetic] cloning a fresh framework from the Digital Skills template...');
   const framework = await db
     .insertInto('competency_frameworks')
-    .values({ org_id: org.id, name: 'Synthetic Validation Framework', category: template.category, created_by: adminUser.id })
+    .values({ org_id: org.id, name: 'Synthetic Validation Framework', category: template.category, created_by: adminMembership.person_id })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -95,7 +100,7 @@ async function main() {
       name: `Synthetic Cohort (n=${N_LEARNERS})`,
       pre_link_token: crypto.randomUUID(),
       post_link_token: crypto.randomUUID(),
-      created_by: adminUser.id,
+      created_by: adminMembership.person_id,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

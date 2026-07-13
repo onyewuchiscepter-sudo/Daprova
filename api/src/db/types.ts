@@ -15,12 +15,10 @@ export interface OrganisationsTable {
   deleted_at: Timestamp | null;
 }
 
-export interface UsersTable {
+export interface PeopleTable {
   id: Generated<string>;
-  org_id: string;
   email: string;
   display_name: string | null;
-  role: Generated<string>; // admin | viewer
   auth_provider: Generated<string>;
   auth_uid: string;
   created_at: Generated<Timestamp>;
@@ -28,12 +26,23 @@ export interface UsersTable {
   deleted_at: Timestamp | null;
 }
 
+export interface OrgMembershipsTable {
+  id: Generated<string>;
+  person_id: string;
+  org_id: string;
+  role: Generated<string>; // admin | viewer
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
 export interface RefreshTokensTable {
   id: Generated<string>;
-  user_id: string;
+  person_id: string;
+  org_id: string;
   jti: string;
   expires_at: Timestamp;
   revoked_at: Timestamp | null;
+  replaced_by_jti: string | null;
   created_at: Generated<Timestamp>;
 }
 
@@ -185,7 +194,8 @@ export interface CohortReportsTable {
 
 export interface Database {
   organisations: OrganisationsTable;
-  users: UsersTable;
+  people: PeopleTable;
+  org_memberships: OrgMembershipsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

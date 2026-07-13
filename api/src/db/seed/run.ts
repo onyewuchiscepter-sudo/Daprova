@@ -39,26 +39,36 @@ async function main() {
     // Keyed on email, not auth_uid: the emulator's in-memory user store is
     // wiped on every restart, so a given email gets a fresh uid each time —
     // without this, re-seeding after an emulator restart would either hit the
-    // users.email unique constraint or silently leave a stale auth_uid behind.
-    const existing = await db.selectFrom('users').selectAll().where('email', '=', spec.email).executeTakeFirst();
+    // people.email unique constraint or silently leave a stale auth_uid behind.
+    const existing = await db.selectFrom('people').selectAll().where('email', '=', spec.email).executeTakeFirst();
+    let personId: string;
     if (!existing) {
-      await db
-        .insertInto('users')
-        .values({
-          org_id: org.id,
-          email: spec.email,
-          display_name: spec.display_name,
-          role,
-          auth_provider: 'firebase',
-          auth_uid: fbUser.uid,
-        })
-        .execute();
-      console.log(`[seed] created ${role} user ${spec.email}`);
-    } else if (existing.auth_uid !== fbUser.uid) {
-      await db.updateTable('users').set({ auth_uid: fbUser.uid }).where('id', '=', existing.id).execute();
-      console.log(`[seed] updated ${role} user ${spec.email} auth_uid (emulator was restarted)`);
+      const person = await db
+        .insertInto('people')
+        .values({ email: spec.email, display_name: spec.display_name, auth_provider: 'firebase', auth_uid: fbUser.uid })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      personId = person.id;
+      console.log(`[seed] created ${role} person ${spec.email}`);
     } else {
-      console.log(`[seed] ${role} user ${spec.email} already exists`);
+      personId = existing.id;
+      if (existing.auth_uid !== fbUser.uid) {
+        await db.updateTable('people').set({ auth_uid: fbUser.uid }).where('id', '=', existing.id).execute();
+        console.log(`[seed] updated ${role} person ${spec.email} auth_uid (emulator was restarted)`);
+      } else {
+        console.log(`[seed] ${role} person ${spec.email} already exists`);
+      }
+    }
+
+    const membership = await db
+      .selectFrom('org_memberships')
+      .selectAll()
+      .where('person_id', '=', personId)
+      .where('org_id', '=', org.id)
+      .executeTakeFirst();
+    if (!membership) {
+      await db.insertInto('org_memberships').values({ person_id: personId, org_id: org.id, role }).execute();
+      console.log(`[seed] added ${role} membership for ${spec.email}`);
     }
   }
 

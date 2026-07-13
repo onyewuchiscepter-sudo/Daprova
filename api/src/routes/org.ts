@@ -5,20 +5,25 @@ import { notFound } from '../lib/errors.js';
 
 export const orgRouter = Router();
 
-// GET /api/v1/me — current user's profile, keyed off the session claims.
-// Used by the admin-web client to restore full user info after a page
-// refresh (the refresh-token flow only returns a new session JWT, not the
-// user's email/display_name).
+// GET /api/v1/me — current person's profile *within their active session's
+// org* (role is per-membership, not per-person, since a person can belong
+// to more than one org — docs/org-onboarding-spec.md §2). Used by the
+// admin-web client to restore full user info after a page refresh (the
+// refresh-token flow only returns a new session JWT, not the person's
+// email/display_name).
 orgRouter.get('/me', requireAuth, async (req, res, next) => {
   try {
-    const user = await db
-      .selectFrom('users')
-      .selectAll()
-      .where('id', '=', req.auth!.sub)
-      .where('deleted_at', 'is', null)
+    const row = await db
+      .selectFrom('people')
+      .innerJoin('org_memberships', 'org_memberships.person_id', 'people.id')
+      .select(['people.id', 'people.email', 'people.display_name', 'org_memberships.role', 'org_memberships.org_id'])
+      .where('people.id', '=', req.auth!.sub)
+      .where('people.deleted_at', 'is', null)
+      .where('org_memberships.org_id', '=', req.auth!.org_id)
+      .where('org_memberships.deleted_at', 'is', null)
       .executeTakeFirst();
-    if (!user) throw notFound('User not found');
-    res.json({ id: user.id, email: user.email, display_name: user.display_name, role: user.role, org_id: user.org_id });
+    if (!row) throw notFound('User not found');
+    res.json(row);
   } catch (err) {
     next(err);
   }
@@ -36,6 +41,25 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
       .executeTakeFirst();
     if (!org) throw notFound('Organisation not found');
     res.json({ id: org.id, name: org.name, slug: org.slug, logo_url: org.logo_url, contact_email: org.contact_email });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/org/memberships — every org the current signed-in person
+// belongs to, for the org-switcher UI (docs/org-onboarding-spec.md §2).
+orgRouter.get('/org/memberships', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await db
+      .selectFrom('org_memberships')
+      .innerJoin('organisations', 'organisations.id', 'org_memberships.org_id')
+      .select(['organisations.id', 'organisations.name', 'org_memberships.role'])
+      .where('org_memberships.person_id', '=', req.auth!.sub)
+      .where('org_memberships.deleted_at', 'is', null)
+      .where('organisations.deleted_at', 'is', null)
+      .orderBy('organisations.name')
+      .execute();
+    res.json(rows);
   } catch (err) {
     next(err);
   }
