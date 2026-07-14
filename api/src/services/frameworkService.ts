@@ -1,5 +1,6 @@
 import { db } from '../db/index.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { fromCsv } from '../lib/csv.js';
 
 async function assertFrameworkOwnership(orgId: string, frameworkId: string) {
   const framework = await db
@@ -273,6 +274,93 @@ export async function createQuestion(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+}
+
+const REQUIRED_CSV_COLUMNS = ['question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option'] as const;
+
+type ParsedQuestion = {
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: QuestionOption;
+  assessment_type: QuestionAssessmentType;
+};
+
+// All-or-nothing by design: reporting "row 12 has an invalid correct_option"
+// and inserting nothing is easier for an admin to fix and re-upload than a
+// partially-imported batch they'd have to reconcile by hand.
+function parseQuestionsCsv(csvText: string): { questions: ParsedQuestion[]; errors: string[] } {
+  const rows = fromCsv(csvText);
+  if (rows.length === 0) return { questions: [], errors: ['CSV is empty'] };
+
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const missingColumns = REQUIRED_CSV_COLUMNS.filter((c) => !header.includes(c));
+  if (missingColumns.length > 0) return { questions: [], errors: [`Missing required column(s): ${missingColumns.join(', ')}`] };
+
+  const colIndex = (name: string) => header.indexOf(name);
+  const assessmentTypeCol = colIndex('assessment_type');
+
+  const errors: string[] = [];
+  const questions: ParsedQuestion[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (row.every((cell) => cell.trim() === '')) continue; // skip blank rows
+    const rowNum = r + 1; // 1-indexed, matches what a spreadsheet app shows (header is row 1)
+
+    const question_text = row[colIndex('question_text')]?.trim();
+    const option_a = row[colIndex('option_a')]?.trim();
+    const option_b = row[colIndex('option_b')]?.trim();
+    const option_c = row[colIndex('option_c')]?.trim();
+    const option_d = row[colIndex('option_d')]?.trim();
+    const correctRaw = row[colIndex('correct_option')]?.trim().toLowerCase();
+    const assessmentRaw = assessmentTypeCol !== -1 ? row[assessmentTypeCol]?.trim().toLowerCase() : 'both';
+
+    const rowErrors: string[] = [];
+    if (!question_text) rowErrors.push('question_text is required');
+    if (!option_a) rowErrors.push('option_a is required');
+    if (!option_b) rowErrors.push('option_b is required');
+    if (!option_c) rowErrors.push('option_c is required');
+    if (!option_d) rowErrors.push('option_d is required');
+    if (!correctRaw || !['a', 'b', 'c', 'd'].includes(correctRaw)) rowErrors.push('correct_option must be a, b, c, or d');
+    if (assessmentRaw && !['pre', 'post', 'both'].includes(assessmentRaw)) rowErrors.push('assessment_type must be pre, post, or both');
+
+    if (rowErrors.length > 0) {
+      errors.push(`Row ${rowNum}: ${rowErrors.join('; ')}`);
+      continue;
+    }
+
+    questions.push({
+      question_text: question_text!,
+      option_a: option_a!,
+      option_b: option_b!,
+      option_c: option_c!,
+      option_d: option_d!,
+      correct_option: correctRaw as QuestionOption,
+      assessment_type: (assessmentRaw || 'both') as QuestionAssessmentType,
+    });
+  }
+
+  return { questions, errors };
+}
+
+export async function bulkCreateQuestions(orgId: string, frameworkId: string, areaId: string, csvText: string) {
+  const framework = await assertFrameworkOwnership(orgId, frameworkId);
+  await assertNotLocked(framework);
+  await assertAreaOwnership(frameworkId, areaId);
+
+  const { questions, errors } = parseQuestionsCsv(csvText);
+  if (errors.length > 0) throw badRequest('CSV validation failed — nothing was imported', { errors });
+  if (questions.length === 0) throw badRequest('No questions found in CSV');
+
+  await db
+    .insertInto('questions')
+    .values(questions.map((q) => ({ area_id: areaId, ...q })))
+    .execute();
+
+  return { created: questions.length };
 }
 
 // Replaces the old is_active-only toggle with a general partial update —

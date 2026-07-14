@@ -122,6 +122,16 @@ frameworksRouter.post('/:id/areas/:areaId/questions', async (req, res, next) => 
   }
 });
 
+const bulkQuestionsSchema = z.object({ csv: z.string().min(1) });
+frameworksRouter.post('/:id/areas/:areaId/questions/bulk', async (req, res, next) => {
+  try {
+    const body = parse(bulkQuestionsSchema, req.body);
+    res.status(201).json(await frameworkService.bulkCreateQuestions(req.auth!.org_id!, req.params.id, req.params.areaId, body.csv));
+  } catch (err) {
+    next(err);
+  }
+});
+
 const updateQuestionSchema = z.object({
   question_text: z.string().min(1).optional(),
   option_a: z.string().min(1).optional(),

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { apiFetch } from '../api';
+import { apiFetch, ApiError } from '../api';
 
 type Question = {
   id: string;
@@ -47,6 +47,8 @@ export default function FrameworkDetailPage() {
   const [newQuestion, setNewQuestion] = useState<QuestionFormValues>(EMPTY_QUESTION_FORM);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editQuestion, setEditQuestion] = useState<QuestionFormValues>(EMPTY_QUESTION_FORM);
+  const [bulkUploadAreaId, setBulkUploadAreaId] = useState<string | null>(null);
+  const [bulkErrors, setBulkErrors] = useState<string[] | null>(null);
 
   const { data: framework, isLoading, error } = useQuery<FrameworkDetail>({
     queryKey: ['framework', id],
@@ -97,6 +99,42 @@ export default function FrameworkDetailPage() {
       return invalidate();
     },
   });
+
+  const bulkUploadMutation = useMutation({
+    mutationFn: ({ areaId, csv }: { areaId: string; csv: string }) =>
+      apiFetch(`/api/v1/frameworks/${id}/areas/${areaId}/questions/bulk`, { method: 'POST', body: JSON.stringify({ csv }) }),
+    onSuccess: () => {
+      setBulkUploadAreaId(null);
+      setBulkErrors(null);
+      return invalidate();
+    },
+    onError: (err: unknown) => {
+      const details = err instanceof ApiError ? (err.details as { errors?: string[] } | undefined) : undefined;
+      setBulkErrors(details?.errors ?? [err instanceof Error ? err.message : 'Upload failed']);
+    },
+  });
+
+  function downloadQuestionsCsvTemplate() {
+    const csv =
+      'question_text,option_a,option_b,option_c,option_d,correct_option,assessment_type\r\n' +
+      'What is 2+2?,3,4,5,6,b,both\r\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'questions-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleBulkFileSelect(areaId: string, file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBulkErrors(null);
+      bulkUploadMutation.mutate({ areaId, csv: String(reader.result) });
+    };
+    reader.readAsText(file);
+  }
 
   const cloneMutation = useMutation({
     mutationFn: () => apiFetch(`/api/v1/frameworks/${id}/clone`, { method: 'POST', body: JSON.stringify({}) }),
@@ -248,16 +286,61 @@ export default function FrameworkDetailPage() {
                     submitLabel="Add question"
                     valid={questionFormValid(newQuestion)}
                   />
+                ) : bulkUploadAreaId === area.id ? (
+                  <div className="bg-slate-50 rounded p-3 space-y-2">
+                    <p className="text-xs text-slate-600">
+                      Columns: <code>question_text, option_a, option_b, option_c, option_d, correct_option, assessment_type</code> (last
+                      column optional, defaults to "both").
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button onClick={downloadQuestionsCsvTemplate} className="text-xs text-slate-500 hover:underline">
+                        Download template
+                      </button>
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        disabled={bulkUploadMutation.isPending}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleBulkFileSelect(area.id, file);
+                          e.target.value = '';
+                        }}
+                        className="text-xs"
+                      />
+                      <button onClick={() => setBulkUploadAreaId(null)} className="text-xs text-slate-500 hover:underline">
+                        Cancel
+                      </button>
+                    </div>
+                    {bulkUploadMutation.isPending && <p className="text-xs text-slate-500">Uploading…</p>}
+                    {bulkErrors && (
+                      <ul className="text-xs text-red-600 list-disc pl-4">
+                        {bulkErrors.map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ) : (
-                  <button
-                    onClick={() => {
-                      setAddingQuestionForArea(area.id);
-                      setNewQuestion(EMPTY_QUESTION_FORM);
-                    }}
-                    className="text-sm text-slate-700 hover:underline"
-                  >
-                    + Add question
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => {
+                        setAddingQuestionForArea(area.id);
+                        setNewQuestion(EMPTY_QUESTION_FORM);
+                      }}
+                      className="text-sm text-slate-700 hover:underline"
+                    >
+                      + Add question
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBulkUploadAreaId(area.id);
+                        setBulkErrors(null);
+                      }}
+                      className="text-sm text-slate-700 hover:underline"
+                    >
+                      Bulk upload CSV
+                    </button>
+                  </div>
                 )}
               </div>
             )}
