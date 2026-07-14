@@ -6,8 +6,13 @@ import type { SessionClaims } from '@daprova/shared';
 const SESSION_TTL = '24h';
 const REFRESH_TTL_SECS = 7 * 24 * 60 * 60; // 7 days
 
-export function signSessionToken(claims: SessionClaims): string {
-  return jwt.sign(claims, env.sessionJwtSecret, { expiresIn: SESSION_TTL });
+// docs/org-onboarding-spec.md §7.3 — impersonation sessions get a hard,
+// short expiry distinct from a normal session's 24h lifetime, and are
+// never renewed via the refresh-token/cookie machinery: they just expire.
+export const IMPERSONATION_TTL = '30m';
+
+export function signSessionToken(claims: SessionClaims, ttl: jwt.SignOptions['expiresIn'] = SESSION_TTL): string {
+  return jwt.sign(claims, env.sessionJwtSecret, { expiresIn: ttl });
 }
 
 export function verifySessionToken(token: string): SessionClaims {

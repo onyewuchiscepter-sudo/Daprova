@@ -2,11 +2,16 @@ import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 
 export default function Layout() {
-  const { user, org, memberships, switchOrg, signOut } = useAuth();
+  const { user, org, memberships, switchOrg, signOut, impersonation, endImpersonation } = useAuth();
   const navigate = useNavigate();
 
   async function handleSignOut() {
     await signOut();
+    navigate('/login');
+  }
+
+  async function handleEndImpersonation() {
+    await endImpersonation();
     navigate('/login');
   }
 
@@ -17,6 +22,25 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* docs/org-onboarding-spec.md §7.3 point 4 — persistent, unmissable,
+          and visibly different by mode so there's never ambiguity about
+          which capability level is active. */}
+      {impersonation && (
+        <div
+          className={`px-6 py-2 text-sm font-medium flex items-center justify-between ${
+            impersonation.mode === 'write' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+          }`}
+        >
+          <span>
+            {impersonation.mode === 'write'
+              ? `Acting as ${impersonation.orgName} / ${impersonation.targetEmail} — every action is logged`
+              : `Viewing as ${impersonation.orgName} / ${impersonation.targetEmail} (read-only)`}
+          </span>
+          <button onClick={handleEndImpersonation} className="underline">
+            End impersonation
+          </button>
+        </div>
+      )}
       <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="font-semibold text-slate-900">Daprova Admin</span>

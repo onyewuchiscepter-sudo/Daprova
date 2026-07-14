@@ -9,9 +9,14 @@ export type ApiError = {
 };
 
 export type SessionClaims = {
-  sub: string; // people.id
+  sub: string; // people.id — for an impersonation session, this is the TARGET member's id, not the platform admin's (docs/org-onboarding-spec.md §7.3): the point is to act/view exactly as that member, bounded by their own role. The platform admin's real identity is tracked separately via `impersonation` below and impersonation_sessions.platform_admin_person_id.
   org_id: string; // the org this session is scoped to (a person may belong to more than one)
   role: Role;
+  impersonation?: {
+    session_id: string; // impersonation_sessions.id
+    mode: 'write' | 'read_only';
+    platform_admin_person_id: string; // who's actually driving this session
+  };
 };
 
 export type CompetencyCategory =

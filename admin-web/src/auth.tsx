@@ -8,12 +8,16 @@ type User = { id: string; email: string; display_name: string | null; role: 'adm
 type Org = { id: string; name: string; slug: string; contact_email: string };
 type Membership = { id: string; name: string; role: 'admin' | 'viewer' };
 type PendingOrgSelection = { org_selection_token: string; orgs: Membership[] };
+// docs/org-onboarding-spec.md §7.3 — display-only; actual enforcement of
+// read-only mode happens server-side (middleware/auth.ts), not here.
+type Impersonation = { mode: 'write' | 'read_only'; orgName: string; targetEmail: string };
 
 type AuthState = {
   user: User | null;
   org: Org | null;
   memberships: Membership[];
   pendingOrgSelection: PendingOrgSelection | null;
+  impersonation: Impersonation | null;
   loading: boolean;
   restoring: boolean;
   error: string | null;
@@ -25,6 +29,8 @@ type AuthState = {
   // normal sign-in form — currently just AcceptInvitePage, which gets a
   // { session_token, user } pair back from POST /invites/:token/accept.
   completeSession: (result: { session_token: string; user: User }) => Promise<void>;
+  adoptImpersonation: (sessionToken: string, info: Impersonation) => Promise<void>;
+  endImpersonation: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -35,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [org, setOrg] = useState<Org | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [pendingOrgSelection, setPendingOrgSelection] = useState<PendingOrgSelection | null>(null);
+  const [impersonation, setImpersonation] = useState<Impersonation | null>(null);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +132,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
   }
 
+  // docs/org-onboarding-spec.md §7.3 — adopts a pre-issued impersonation
+  // token (minted by platform-web's POST /impersonation/start, handed off
+  // via ImpersonatePage.tsx). No Firebase round-trip and no refresh-token
+  // cookie: this session doesn't renew, it just expires at its 30-minute
+  // hard TTL. `impersonation` info is display-only for the persistent
+  // banner — the real enforcement is server-side (middleware/auth.ts).
+  async function adoptImpersonation(token: string, info: Impersonation) {
+    setSessionToken(token);
+    const [meData, orgData] = await Promise.all([apiFetch('/api/v1/me'), apiFetch('/api/v1/org')]);
+    setUser(meData);
+    setOrg(orgData);
+    setMemberships([]);
+    setImpersonation(info);
+  }
+
+  async function endImpersonationSession() {
+    await apiFetch('/api/v1/impersonation/end', { method: 'POST' }).catch(() => {});
+    setSessionToken(null);
+    setUser(null);
+    setOrg(null);
+    setMemberships([]);
+    setImpersonation(null);
+    queryClient.clear();
+  }
+
   // Best-effort session restore on refresh via the refresh-token cookie.
   useEffect(() => {
     (async () => {
@@ -155,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         org,
         memberships,
         pendingOrgSelection,
+        impersonation,
         loading,
         restoring,
         error,
@@ -163,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         switchOrg,
         signOut,
         completeSession: applySession,
+        adoptImpersonation,
+        endImpersonation: endImpersonationSession,
       }}
     >
       {children}

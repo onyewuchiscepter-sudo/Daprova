@@ -258,6 +258,17 @@ export interface CohortTierHistoryTable {
   payment_id: string | null;
 }
 
+export interface ImpersonationSessionsTable {
+  id: Generated<string>;
+  platform_admin_person_id: string;
+  target_org_membership_id: string;
+  reason: string;
+  mode: string; // write | read_only
+  started_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  ended_at: Timestamp | null;
+}
+
 export interface PaymentsTable {
   id: Generated<string>;
   org_id: string;
@@ -293,6 +304,7 @@ export interface Database {
   cohort_tier_history: CohortTierHistoryTable;
   signup_fraud_flags: SignupFraudFlagsTable;
   payments: PaymentsTable;
+  impersonation_sessions: ImpersonationSessionsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

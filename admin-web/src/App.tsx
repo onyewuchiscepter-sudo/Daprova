@@ -13,6 +13,7 @@ import CourseDetailPage from './pages/CourseDetailPage';
 import CohortDashboardPage from './pages/CohortDashboardPage';
 import TeamPage from './pages/TeamPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import ImpersonatePage from './pages/ImpersonatePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, restoring } = useAuth();
@@ -28,6 +29,7 @@ function AppRoutes() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/signup/contact-sales" element={<ContactSalesPage />} />
       <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
+      <Route path="/impersonate" element={<ImpersonatePage />} />
       <Route
         element={
           <RequireAuth>

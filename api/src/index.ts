@@ -16,6 +16,7 @@ import { platformRouter } from './routes/platform.js';
 import { invitesRouter } from './routes/invites.js';
 import { signupRouter } from './routes/signup.js';
 import { paymentsRouter } from './routes/payments.js';
+import { impersonationRouter } from './routes/impersonation.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 import { runMigrationsToLatest } from './db/migrate.js';
@@ -48,6 +49,7 @@ app.use('/api/v1/platform', adminLimiter, platformRouter);
 app.use('/api/v1/invites', publicLimiter, invitesRouter);
 app.use('/api/v1/orgs', publicLimiter, signupRouter);
 app.use('/api/v1/payments', publicLimiter, paymentsRouter);
+app.use('/api/v1/impersonation', adminLimiter, impersonationRouter);
 
 app.use(errorHandler);
 

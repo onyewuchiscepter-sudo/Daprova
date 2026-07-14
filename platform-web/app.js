@@ -6,6 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js';
 
 const API_BASE = window.DAPROVA_API_BASE || 'http://localhost:4001';
+const ADMIN_WEB_ORIGIN = window.DAPROVA_ADMIN_WEB_ORIGIN || 'http://localhost:5173';
 const app = document.getElementById('app');
 
 const firebaseApp = initializeApp({
@@ -242,11 +243,17 @@ async function renderOrgDetail(orgId, status) {
     </div>
 
     <h3>Members</h3>
+    <p class="muted">docs/org-onboarding-spec.md §7.3 — a reason is required for every impersonation. Mode (write/read-only) is derived from your own platform role, not chosen here.</p>
     <div class="card">
       <table>
-        <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
+        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th></th></tr></thead>
         <tbody>
-          ${org.members.map((m) => `<tr><td>${m.email}</td><td>${m.display_name ?? ''}</td><td>${m.role}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No members.</td></tr>'}
+          ${org.members
+            .map(
+              (m) => `<tr><td>${m.email}</td><td>${m.display_name ?? ''}</td><td>${m.role}</td>
+            <td><button class="impersonate-btn" data-person-id="${m.id}" data-email="${m.email}">Impersonate</button></td></tr>`,
+            )
+            .join('') || '<tr><td colspan="4" class="muted">No members.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -315,6 +322,27 @@ async function renderOrgDetail(orgId, status) {
           body: JSON.stringify({ cohort_id: btn.dataset.cohortId, new_tier: select.value }),
         }),
       );
+    });
+  });
+
+  document.querySelectorAll('.impersonate-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const reason = prompt(`Reason for impersonating ${btn.dataset.email}? (required)`);
+      if (!reason || !reason.trim()) return;
+      try {
+        const result = await api('/api/v1/impersonation/start', {
+          method: 'POST',
+          body: JSON.stringify({ org_id: orgId, person_id: btn.dataset.personId, reason }),
+        });
+        const url = new URL(`${ADMIN_WEB_ORIGIN}/impersonate`);
+        url.searchParams.set('token', result.session_token);
+        url.searchParams.set('mode', result.mode);
+        url.searchParams.set('org_name', result.target.org_name);
+        url.searchParams.set('email', result.target.email);
+        window.open(url.toString(), '_blank');
+      } catch (err) {
+        await renderOrgDetail(orgId, { error: err.message });
+      }
     });
   });
 }
