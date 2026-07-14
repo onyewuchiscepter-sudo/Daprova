@@ -12,6 +12,8 @@ type Cohort = {
   total_enrolled: number;
   pre_completed: number;
   post_completed: number;
+  capacity_status: 'allow' | 'warn' | 'block';
+  max_students: number | null;
 };
 type LearnerRow = {
   learner_id: string;
@@ -211,6 +213,18 @@ export default function CohortDashboardPage() {
     <div>
       <h1 className="text-lg font-semibold text-slate-900 mb-1">{cohort.name}</h1>
       <p className="text-sm text-slate-500 mb-6 capitalize">{cohort.status}</p>
+
+      {cohort.capacity_status !== 'allow' && (
+        <div
+          className={`mb-6 rounded-md px-4 py-3 text-sm ${
+            cohort.capacity_status === 'block' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+          }`}
+        >
+          {cohort.capacity_status === 'block'
+            ? `This cohort has reached its plan's limit of ${cohort.max_students} students — upgrade to enrol more.`
+            : `This cohort is approaching its plan's limit (${cohort.total_enrolled}/${cohort.max_students} students) — consider upgrading soon.`}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <LinkCard label="Pre-assessment link" token={cohort.pre_link_token} onCopy={copyLink} onRegenerate={() => regenerateMutation.mutate('pre')} />

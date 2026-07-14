@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { lockFrameworkIfNeeded } from './frameworkService.js';
 import { evaluateSubmission } from './dataQualityService.js';
+import { assertCapacityAvailable } from './pricingService.js';
 
 async function resolveCohortByToken(cohortToken: string) {
   const cohort = await db
@@ -38,6 +39,13 @@ export async function startSession(
     if (sessionType === 'post') {
       throw badRequest('No learner record found for this device. Complete the pre-assessment first, or ask your admin to link your account.');
     }
+
+    // docs/org-onboarding-spec.md §5.4 — a brand new learner is exactly the
+    // "add a student to a cohort" action the plan's student cap gates.
+    // Checked here rather than in the admin-facing cohort endpoints, since
+    // this public link is the only place enrollment actually happens.
+    await assertCapacityAvailable(cohort.id);
+
     learner = await db
       .insertInto('learners')
       .values({
@@ -52,6 +60,12 @@ export async function startSession(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+
+    await db
+      .updateTable('cohorts')
+      .set((eb) => ({ student_count: eb('student_count', '+', 1) }))
+      .where('id', '=', cohort.id)
+      .execute();
   }
 
   let session = await db

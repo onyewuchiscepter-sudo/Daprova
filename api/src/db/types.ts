@@ -7,9 +7,12 @@ export interface OrganisationsTable {
   name: string;
   slug: string;
   logo_url: string | null;
-  plan_tier: Generated<string>;
+  current_plan_tier: Generated<string>;
   contact_email: string;
   country: Generated<string>;
+  has_used_free_trial: Generated<boolean>;
+  billing_status: Generated<string>; // active | locked_pending_upgrade | pending_manual_quote | suspended
+  signup_review_status: string | null; // null | flagged
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -105,6 +108,10 @@ export interface CohortsTable {
   post_link_token: string;
   pass_threshold: Generated<number>;
   created_by: string | null;
+  cohort_number: number | null;
+  student_count: Generated<number>;
+  is_free_trial: Generated<boolean>;
+  plan_tier_at_creation: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
 }
@@ -222,6 +229,24 @@ export interface InvitesTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface PlanTiersTable {
+  tier_id: string; // FREE_TRIAL | ENTRY | GROWTH | SCALE_1 | SCALE_2 | ENTERPRISE
+  name: string;
+  min_students: number;
+  max_students: number | null; // null = uncapped (Enterprise)
+  price: number | null; // null = custom quote (Enterprise)
+  features: unknown; // jsonb array of feature keys
+}
+
+export interface CohortTierHistoryTable {
+  id: Generated<string>;
+  cohort_id: string;
+  old_tier: string | null;
+  new_tier: string;
+  changed_at: Generated<Timestamp>;
+  payment_id: string | null;
+}
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
@@ -229,6 +254,8 @@ export interface Database {
   platform_admins: PlatformAdminsTable;
   audit_log: AuditLogTable;
   invites: InvitesTable;
+  plan_tiers: PlanTiersTable;
+  cohort_tier_history: CohortTierHistoryTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

@@ -5,6 +5,7 @@ import { buildReportDataContract, type NarrativeFields } from './reportDataServi
 import { renderReportPdf } from './reports/pdf/index.js';
 import { renderReportDocx } from './reports/docx/index.js';
 import type { FunderTemplateKey } from './reports/templateRegistry.js';
+import { assertFeature } from './pricingService.js';
 
 const REPORT_LIST_COLUMNS = ['id', 'cohort_id', 'funder_template', 'narrative_json', 'status', 'generated_at'] as const;
 
@@ -13,6 +14,12 @@ const REPORT_LIST_COLUMNS = ['id', 'cohort_id', 'funder_template', 'narrative_js
 // add operational complexity (worker process, retry/poll UI) without a
 // user-visible benefit at this scale.
 export async function generateReport(orgId: string, cohortId: string, templateKey: FunderTemplateKey, narrative: NarrativeFields, generatedBy: string) {
+  // docs/org-onboarding-spec.md §5.3 — exportable/downloadable reports are
+  // gated from GROWTH upward; FREE_TRIAL/ENTRY don't include the feature.
+  // Scoped to this specific cohort's tier, not the org's — pricing is
+  // per-cohort (§5.7).
+  await assertFeature(orgId, cohortId, 'exportable_reports');
+
   const data = await buildReportDataContract(orgId, cohortId, narrative);
   const [pdf, docx] = await Promise.all([renderReportPdf(templateKey, data), renderReportDocx(templateKey, data)]);
 

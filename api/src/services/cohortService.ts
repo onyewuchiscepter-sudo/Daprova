@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { badRequest, notFound } from '../lib/errors.js';
+import { assignTierForNewCohort, checkCapacity } from './pricingService.js';
 
 export async function createCourse(orgId: string, opts: { name: string; category: string }) {
   return db.insertInto('courses').values({ org_id: orgId, name: opts.name, category: opts.category }).returningAll().executeTakeFirstOrThrow();
@@ -36,7 +37,14 @@ export async function createCohort(
   orgId: string,
   userId: string,
   courseId: string,
-  opts: { name: string; framework_id: string; start_date?: string; end_date?: string; pass_threshold?: number },
+  opts: {
+    name: string;
+    framework_id: string;
+    start_date?: string;
+    end_date?: string;
+    pass_threshold?: number;
+    projected_student_count?: number;
+  },
 ) {
   await assertCourseOwnership(orgId, courseId);
 
@@ -49,7 +57,17 @@ export async function createCohort(
     .executeTakeFirst();
   if (!framework) throw badRequest('framework_id does not reference a framework owned by this org');
 
-  return db
+  // Ordinal per org (docs/org-onboarding-spec.md §4.4) — drives free-trial
+  // eligibility indirectly via has_used_free_trial, not read directly here.
+  const existingCount = await db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .select(({ fn }) => fn.countAll().as('count'))
+    .where('courses.org_id', '=', orgId)
+    .executeTakeFirstOrThrow();
+  const cohortNumber = Number(existingCount.count) + 1;
+
+  const cohort = await db
     .insertInto('cohorts')
     .values({
       course_id: courseId,
@@ -61,9 +79,25 @@ export async function createCohort(
       post_link_token: crypto.randomUUID(),
       pass_threshold: opts.pass_threshold ?? 60,
       created_by: userId,
+      cohort_number: cohortNumber,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+
+  // Pricing assignment (Sprint 4) — the actual admin-facing cohort-creation
+  // form doesn't collect a student estimate yet (that's Sprint 5/6's
+  // signup-flow scope), so a rough default of 1 is used when the caller
+  // doesn't supply one; real enrollment still gets capped correctly via
+  // checkCapacity as students are actually added.
+  const { tier, isFreeTrial, cohortStatus } = await assignTierForNewCohort(orgId, cohort.id, opts.projected_student_count ?? 1);
+  const updated = await db
+    .updateTable('cohorts')
+    .set({ plan_tier_at_creation: tier.tier_id, is_free_trial: isFreeTrial, status: cohortStatus === 'pending_manual_quote' ? 'pending_manual_quote' : cohort.status })
+    .where('id', '=', cohort.id)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  return updated;
 }
 
 export async function listCohorts(orgId: string, courseId: string) {
@@ -111,11 +145,18 @@ export async function getCohort(orgId: string, cohortId: string) {
       .executeTakeFirstOrThrow(),
   ]);
 
+  // docs/org-onboarding-spec.md §5.4 — "warn at 90% of cap" needs an actual
+  // reader to be meaningful; the cohort detail view is the natural place
+  // since the admin dashboard already fetches it per cohort.
+  const capacity = await checkCapacity(cohortId);
+
   return {
     ...cohort,
     total_enrolled: Number(enrolled.count),
     pre_completed: Number(preCompleted.count),
     post_completed: Number(postCompleted.count),
+    capacity_status: capacity.status,
+    max_students: capacity.maxStudents,
   };
 }
 

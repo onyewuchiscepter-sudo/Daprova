@@ -46,6 +46,7 @@ const createCohortSchema = z.object({
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   pass_threshold: z.number().min(0).max(100).optional(),
+  projected_student_count: z.number().int().positive().optional(),
 });
 coursesRouter.post('/:id/cohorts', async (req, res, next) => {
   try {
