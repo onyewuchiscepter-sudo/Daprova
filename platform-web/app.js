@@ -89,8 +89,45 @@ async function renderMain(status) {
     loadError = err.message;
   }
 
+  let flags = [];
+  let flagsError = null;
+  try {
+    flags = await api('/api/v1/platform/fraud-flags');
+  } catch (err) {
+    flagsError = err.message;
+  }
+  const pendingFlags = flags.filter((f) => !f.reviewed_at);
+
   render(`
     <h1>Daprova Platform</h1>
+
+    <h2>Signup fraud review</h2>
+    <p class="muted">docs/org-onboarding-spec.md §7.2 — a match doesn't block signup, it just lands here for review.</p>
+    <div class="card">
+      ${flagsError ? `<p class="error">${flagsError}</p>` : ''}
+      ${status?.flagError ? `<p class="error">${status.flagError}</p>` : ''}
+      <table>
+        <thead><tr><th>New org</th><th>Matches</th><th>Reason</th><th>Flagged</th><th></th></tr></thead>
+        <tbody>
+          ${pendingFlags
+            .map(
+              (f) => `
+            <tr data-flag-id="${f.id}">
+              <td>${f.org_name}</td>
+              <td>${f.matched_org_name}</td>
+              <td>${f.match_reason}</td>
+              <td>${new Date(f.created_at).toLocaleDateString()}</td>
+              <td>
+                <button class="review-btn" data-id="${f.id}" data-decision="approved">Approve</button>
+                <button class="review-btn" data-id="${f.id}" data-decision="rejected">Reject</button>
+              </td>
+            </tr>`,
+            )
+            .join('') || '<tr><td colspan="5" class="muted">No flagged signups pending review.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
     <h2>Organisations</h2>
     <div class="card">
       ${loadError ? `<p class="error">${loadError}</p>` : ''}
@@ -140,6 +177,20 @@ async function renderMain(status) {
     } catch (err) {
       await renderMain({ error: err.message });
     }
+  });
+
+  document.querySelectorAll('.review-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await api(`/api/v1/platform/fraud-flags/${btn.dataset.id}/review`, {
+          method: 'POST',
+          body: JSON.stringify({ decision: btn.dataset.decision }),
+        });
+        await renderMain();
+      } catch (err) {
+        await renderMain({ flagError: err.message });
+      }
+    });
   });
 }
 

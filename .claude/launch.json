@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:assess"],
       "port": 5174
+    },
+    {
+      "name": "platform-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:platform"],
+      "port": 5175
     }
   ]
 }

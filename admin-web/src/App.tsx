@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import Layout from './Layout';
 import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import ContactSalesPage from './pages/ContactSalesPage';
 import FrameworksListPage from './pages/FrameworksListPage';
 import NewFrameworkPage from './pages/NewFrameworkPage';
 import FrameworkDetailPage from './pages/FrameworkDetailPage';
@@ -23,6 +25,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/signup/contact-sales" element={<ContactSalesPage />} />
       <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
       <Route
         element={

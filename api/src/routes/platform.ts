@@ -42,3 +42,22 @@ platformRouter.post('/orgs', async (req, res, next) => {
     next(err);
   }
 });
+
+platformRouter.get('/fraud-flags', async (_req, res, next) => {
+  try {
+    res.json(await platformService.listFraudFlags());
+  } catch (err) {
+    next(err);
+  }
+});
+
+const reviewFraudFlagSchema = z.object({ decision: z.enum(['approved', 'rejected']) });
+platformRouter.post('/fraud-flags/:id/review', async (req, res, next) => {
+  try {
+    const body = reviewFraudFlagSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    res.json(await platformService.reviewFraudFlag(req.auth!.sub, req.params.id, body.data.decision));
+  } catch (err) {
+    next(err);
+  }
+});

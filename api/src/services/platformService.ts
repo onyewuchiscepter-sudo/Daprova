@@ -1,6 +1,7 @@
+import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
 
 export async function listOrgs() {
@@ -81,4 +82,64 @@ export async function createOrgWithAdmin(
   });
 
   return { org: { id: org.id, name: org.name, slug: org.slug }, admin: { id: person.id, email: person.email } };
+}
+
+// docs/org-onboarding-spec.md §7.2/§7.5 — the fraud-review queue. `support`
+// role is sufficient (already enforced at the router level), since
+// approving/rejecting a flagged signup doesn't itself change billing or
+// suspend anything — that's a separate `owner`-only org-regulation action
+// (Sprint 7) a reviewer would take as a manual follow-up if they reject.
+export async function listFraudFlags() {
+  return db
+    .selectFrom('signup_fraud_flags')
+    .innerJoin('organisations as new_org', 'new_org.id', 'signup_fraud_flags.org_id')
+    .innerJoin('organisations as matched_org', 'matched_org.id', 'signup_fraud_flags.matched_org_id')
+    .select([
+      'signup_fraud_flags.id',
+      'signup_fraud_flags.match_reason',
+      'signup_fraud_flags.reviewed_at',
+      'signup_fraud_flags.decision',
+      'signup_fraud_flags.created_at',
+      'new_org.id as org_id',
+      'new_org.name as org_name',
+      'matched_org.id as matched_org_id',
+      'matched_org.name as matched_org_name',
+    ])
+    .orderBy('signup_fraud_flags.created_at', 'desc')
+    .execute();
+}
+
+export async function reviewFraudFlag(reviewerPersonId: string, flagId: string, decision: 'approved' | 'rejected') {
+  const flag = await db.selectFrom('signup_fraud_flags').selectAll().where('id', '=', flagId).executeTakeFirst();
+  if (!flag) throw notFound('Fraud flag not found');
+  if (flag.reviewed_at) throw badRequest('This flag has already been reviewed');
+
+  const updated = await db
+    .updateTable('signup_fraud_flags')
+    .set({ reviewed_at: sql`now()`, reviewed_by: reviewerPersonId, decision })
+    .where('id', '=', flagId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  // Only clear the org's flagged status once every one of its flags has
+  // been reviewed — a single org can accumulate more than one match row.
+  const stillPending = await db
+    .selectFrom('signup_fraud_flags')
+    .select('id')
+    .where('org_id', '=', flag.org_id)
+    .where('reviewed_at', 'is', null)
+    .executeTakeFirst();
+  if (!stillPending) {
+    await db.updateTable('organisations').set({ signup_review_status: null }).where('id', '=', flag.org_id).execute();
+  }
+
+  await writeAuditLog({
+    actorPersonId: reviewerPersonId,
+    actorContext: 'platform_admin',
+    orgId: flag.org_id,
+    action: 'fraud_flag_reviewed',
+    details: { flag_id: flagId, matched_org_id: flag.matched_org_id, match_reason: flag.match_reason, decision },
+  });
+
+  return updated;
 }

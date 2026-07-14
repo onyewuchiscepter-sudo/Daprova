@@ -13,6 +13,15 @@ export interface OrganisationsTable {
   has_used_free_trial: Generated<boolean>;
   billing_status: Generated<string>; // active | locked_pending_upgrade | pending_manual_quote | suspended
   signup_review_status: string | null; // null | flagged
+  org_type: string | null;
+  cac_registration_number: string | null;
+  website_url: string | null;
+  address: string | null;
+  primary_use_case: string | null;
+  expected_cadence: string | null;
+  reports_to_funder: Generated<boolean>;
+  reports_to_funder_name: string | null;
+  referral_source: string | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -24,6 +33,8 @@ export interface PeopleTable {
   display_name: string | null;
   auth_provider: Generated<string>;
   auth_uid: string;
+  phone: string | null;
+  title: string | null;
   created_at: Generated<Timestamp>;
   last_login_at: Timestamp | null;
   deleted_at: Timestamp | null;
@@ -247,6 +258,17 @@ export interface CohortTierHistoryTable {
   payment_id: string | null;
 }
 
+export interface SignupFraudFlagsTable {
+  id: Generated<string>;
+  org_id: string;
+  matched_org_id: string;
+  match_reason: string; // phone_match | domain_match | name_similarity
+  reviewed_at: Timestamp | null;
+  reviewed_by: string | null;
+  decision: string | null; // approved | rejected
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
@@ -256,6 +278,7 @@ export interface Database {
   invites: InvitesTable;
   plan_tiers: PlanTiersTable;
   cohort_tier_history: CohortTierHistoryTable;
+  signup_fraud_flags: SignupFraudFlagsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

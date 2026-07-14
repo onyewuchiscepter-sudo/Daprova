@@ -109,6 +109,12 @@ export default function LoginPage() {
         <button type="button" onClick={handleForgotPassword} className="w-full text-xs text-slate-500 underline">
           Forgot password?
         </button>
+        <p className="text-xs text-slate-500 text-center">
+          New organisation?{' '}
+          <a href="/signup" className="underline">
+            Sign up
+          </a>
+        </p>
         <p className="text-xs text-slate-400">Seed users via `npm run seed --workspace=api` first.</p>
       </form>
     </div>

@@ -14,6 +14,7 @@ import { webhooksRouter } from './routes/webhooks.js';
 import { bootstrapRouter } from './routes/bootstrap.js';
 import { platformRouter } from './routes/platform.js';
 import { invitesRouter } from './routes/invites.js';
+import { signupRouter } from './routes/signup.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 import { runMigrationsToLatest } from './db/migrate.js';
@@ -43,6 +44,7 @@ app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
 app.use('/api/v1/bootstrap', publicLimiter, bootstrapRouter);
 app.use('/api/v1/platform', adminLimiter, platformRouter);
 app.use('/api/v1/invites', publicLimiter, invitesRouter);
+app.use('/api/v1/orgs', publicLimiter, signupRouter);
 
 app.use(errorHandler);
 
