@@ -15,19 +15,33 @@ function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {
 // first visit (FR-M2-07) — POST is used here instead. /start is already a
 // verb-suffixed action route by the spec's own naming, so this doesn't add a
 // new REST-purity violation, just makes the existing one carry a body.
-const startSchema = z.object({
-  learner_token: z.string().uuid().optional(),
-  demographics: z
-    .object({
-      gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional(),
-      age_group: z.enum(['15-24', '25-34', '35-44', '45+']).optional(),
-      location_type: z.enum(['urban', 'rural', 'peri-urban']).optional(),
-      disability: z.enum(['yes', 'no', 'prefer_not_to_say']).optional(),
-    })
-    .optional(),
-  display_name: z.string().optional(),
-  enrolment_id: z.string().optional(),
-});
+// Name, enrolment ID, and demographics are only ever collected once, at a
+// brand-new learner's first (pre-assessment) visit — a returning learner
+// (learner_token present) never re-submits this, so the requirement below
+// only bites in the branch where it actually matters (FR-M2-07).
+const startSchema = z
+  .object({
+    learner_token: z.string().uuid().optional(),
+    demographics: z
+      .object({
+        gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional(),
+        age_group: z.enum(['15-24', '25-34', '35-44', '45+']).optional(),
+        location_type: z.enum(['urban', 'rural', 'peri-urban']).optional(),
+        disability: z.enum(['yes', 'no', 'prefer_not_to_say']).optional(),
+      })
+      .optional(),
+    display_name: z.string().min(1).optional(),
+    enrolment_id: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.learner_token) return;
+    if (!data.display_name) ctx.addIssue({ code: 'custom', path: ['display_name'], message: 'Name is required' });
+    if (!data.enrolment_id) ctx.addIssue({ code: 'custom', path: ['enrolment_id'], message: 'Enrolment/student ID is required' });
+    if (!data.demographics?.gender) ctx.addIssue({ code: 'custom', path: ['demographics', 'gender'], message: 'Gender is required' });
+    if (!data.demographics?.age_group) ctx.addIssue({ code: 'custom', path: ['demographics', 'age_group'], message: 'Age group is required' });
+    if (!data.demographics?.location_type) ctx.addIssue({ code: 'custom', path: ['demographics', 'location_type'], message: 'Location is required' });
+    if (!data.demographics?.disability) ctx.addIssue({ code: 'custom', path: ['demographics', 'disability'], message: 'Disability status is required' });
+  });
 assessRouter.post('/:cohortToken/start', async (req, res, next) => {
   try {
     const body = parse(startSchema, req.body ?? {});

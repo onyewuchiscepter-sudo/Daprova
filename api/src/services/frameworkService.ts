@@ -238,7 +238,62 @@ export async function deactivateArea(orgId: string, frameworkId: string, areaId:
   return db.updateTable('competency_areas').set({ is_active: false }).where('id', '=', areaId).returningAll().executeTakeFirstOrThrow();
 }
 
-export async function patchQuestion(orgId: string, frameworkId: string, questionId: string, isActive: boolean) {
+export type QuestionOption = 'a' | 'b' | 'c' | 'd';
+export type QuestionAssessmentType = 'pre' | 'post' | 'both';
+
+export async function createQuestion(
+  orgId: string,
+  frameworkId: string,
+  areaId: string,
+  opts: {
+    question_text: string;
+    option_a: string;
+    option_b: string;
+    option_c: string;
+    option_d: string;
+    correct_option: QuestionOption;
+    assessment_type?: QuestionAssessmentType;
+  },
+) {
+  const framework = await assertFrameworkOwnership(orgId, frameworkId);
+  await assertNotLocked(framework);
+  await assertAreaOwnership(frameworkId, areaId);
+
+  return db
+    .insertInto('questions')
+    .values({
+      area_id: areaId,
+      question_text: opts.question_text,
+      option_a: opts.option_a,
+      option_b: opts.option_b,
+      option_c: opts.option_c,
+      option_d: opts.option_d,
+      correct_option: opts.correct_option,
+      assessment_type: opts.assessment_type ?? 'both',
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
+// Replaces the old is_active-only toggle with a general partial update —
+// same immutable-once-locked rule (FR-M1-05) applies to every field here,
+// not just is_active, since a locked framework's questions must match
+// whatever a learner already answered against.
+export async function updateQuestion(
+  orgId: string,
+  frameworkId: string,
+  questionId: string,
+  opts: {
+    question_text?: string;
+    option_a?: string;
+    option_b?: string;
+    option_c?: string;
+    option_d?: string;
+    correct_option?: QuestionOption;
+    assessment_type?: QuestionAssessmentType;
+    is_active?: boolean;
+  },
+) {
   const framework = await assertFrameworkOwnership(orgId, frameworkId);
   await assertNotLocked(framework);
 
@@ -251,7 +306,19 @@ export async function patchQuestion(orgId: string, frameworkId: string, question
     .executeTakeFirst();
   if (!question) throw notFound('Question not found');
 
-  await db.updateTable('questions').set({ is_active: isActive }).where('id', '=', questionId).execute();
+  const patch = {
+    ...(opts.question_text !== undefined && { question_text: opts.question_text }),
+    ...(opts.option_a !== undefined && { option_a: opts.option_a }),
+    ...(opts.option_b !== undefined && { option_b: opts.option_b }),
+    ...(opts.option_c !== undefined && { option_c: opts.option_c }),
+    ...(opts.option_d !== undefined && { option_d: opts.option_d }),
+    ...(opts.correct_option !== undefined && { correct_option: opts.correct_option }),
+    ...(opts.assessment_type !== undefined && { assessment_type: opts.assessment_type }),
+    ...(opts.is_active !== undefined && { is_active: opts.is_active }),
+  };
+  if (Object.keys(patch).length > 0) {
+    await db.updateTable('questions').set(patch).where('id', '=', questionId).execute();
+  }
 
   // FR-M1-06: warn (don't block) when an area drops below 8 active questions.
   const activeCount = await db

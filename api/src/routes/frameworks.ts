@@ -103,11 +103,39 @@ frameworksRouter.delete('/:id/areas/:areaId', async (req, res, next) => {
   }
 });
 
-const patchQuestionSchema = z.object({ is_active: z.boolean() });
+const createQuestionSchema = z.object({
+  question_text: z.string().min(1),
+  option_a: z.string().min(1),
+  option_b: z.string().min(1),
+  option_c: z.string().min(1),
+  option_d: z.string().min(1),
+  correct_option: z.enum(['a', 'b', 'c', 'd']),
+  assessment_type: z.enum(['pre', 'post', 'both']).optional(),
+});
+frameworksRouter.post('/:id/areas/:areaId/questions', async (req, res, next) => {
+  try {
+    const body = parse(createQuestionSchema, req.body);
+    const question = await frameworkService.createQuestion(req.auth!.org_id!, req.params.id, req.params.areaId, body);
+    res.status(201).json(question);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const updateQuestionSchema = z.object({
+  question_text: z.string().min(1).optional(),
+  option_a: z.string().min(1).optional(),
+  option_b: z.string().min(1).optional(),
+  option_c: z.string().min(1).optional(),
+  option_d: z.string().min(1).optional(),
+  correct_option: z.enum(['a', 'b', 'c', 'd']).optional(),
+  assessment_type: z.enum(['pre', 'post', 'both']).optional(),
+  is_active: z.boolean().optional(),
+});
 frameworksRouter.patch('/:id/questions/:qId', async (req, res, next) => {
   try {
-    const body = parse(patchQuestionSchema, req.body);
-    res.json(await frameworkService.patchQuestion(req.auth!.org_id!, req.params.id, req.params.qId, body.is_active));
+    const body = parse(updateQuestionSchema, req.body);
+    res.json(await frameworkService.updateQuestion(req.auth!.org_id!, req.params.id, req.params.qId, body));
   } catch (err) {
     next(err);
   }

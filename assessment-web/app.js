@@ -177,26 +177,40 @@
   function showDemographicsForm() {
     render(
       '<h1>Before you start</h1>' +
-      '<p class="subtitle">A few quick questions — this helps measure the program’s impact. Takes 10 seconds.</p>' +
+      '<p class="subtitle">A few quick details — this helps your program place and track you correctly. Takes 30 seconds.</p>' +
       '<div class="card">' +
+      textField('display_name', 'Your full name') +
+      textField('enrolment_id', 'Enrolment / student ID') +
       field('gender', 'Gender', [['male', 'Male'], ['female', 'Female'], ['other', 'Other'], ['prefer_not_to_say', 'Prefer not to say']]) +
       field('age_group', 'Age group', [['15-24', '15–24'], ['25-34', '25–34'], ['35-44', '35–44'], ['45+', '45+']]) +
       field('location_type', 'Location', [['urban', 'Urban'], ['rural', 'Rural'], ['peri-urban', 'Peri-urban']]) +
       field('disability', 'Do you have a disability?', [['no', 'No'], ['yes', 'Yes'], ['prefer_not_to_say', 'Prefer not to say']]) +
-      '<button class="btn" id="demoStart">Start assessment</button>' +
+      '<button class="btn" id="demoStart" disabled>Start assessment</button>' +
       '<p class="error" id="demoError"></p>' +
       '</div>',
     );
-    document.getElementById('demoStart').addEventListener('click', function () {
+    var requiredIds = ['display_name', 'enrolment_id', 'gender', 'age_group', 'location_type', 'disability'];
+    var startBtn = document.getElementById('demoStart');
+    function checkComplete() {
+      startBtn.disabled = requiredIds.some(function (id) { return !document.getElementById(id).value; });
+    }
+    requiredIds.forEach(function (id) {
+      document.getElementById(id).addEventListener('input', checkComplete);
+      document.getElementById(id).addEventListener('change', checkComplete);
+    });
+    startBtn.addEventListener('click', function () {
       var demographics = {
         gender: val('gender'), age_group: val('age_group'), location_type: val('location_type'), disability: val('disability'),
       };
-      begin({ demographics: demographics });
+      begin({ demographics: demographics, display_name: val('display_name'), enrolment_id: val('enrolment_id') });
     });
+  }
+  function textField(name, label) {
+    return '<div class="field"><label>' + label + '</label><input type="text" id="' + name + '" required /></div>';
   }
   function field(name, label, options) {
     var opts = options.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
-    return '<div class="field"><label>' + label + '</label><select id="' + name + '"><option value="">Prefer not to say</option>' + opts + '</select></div>';
+    return '<div class="field"><label>' + label + '</label><select id="' + name + '"><option value="">Select…</option>' + opts + '</select></div>';
   }
   function val(id) { var v = document.getElementById(id).value; return v || undefined; }
 

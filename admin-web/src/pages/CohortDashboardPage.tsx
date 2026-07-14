@@ -213,6 +213,16 @@ export default function CohortDashboardPage() {
     navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/assess/${token}`);
   }
 
+  async function downloadLearnersCsv() {
+    const blob = await apiFetchBlob(`/api/v1/cohorts/${id}/learners/export.csv`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${cohort?.name ?? 'learners'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!cohort) return <p className="text-slate-500">Loading…</p>;
 
   const prePct = cohort.total_enrolled > 0 ? Math.round((cohort.pre_completed / cohort.total_enrolled) * 100) : 0;
@@ -343,6 +353,12 @@ export default function CohortDashboardPage() {
           {analytics && analytics.n_learners === 0 && hasFilters && (
             <div className="bg-white rounded-lg shadow p-5 mb-6 text-sm text-slate-500">No learners match the selected filters.</div>
           )}
+
+          <div className="flex justify-end mb-2">
+            <button onClick={downloadLearnersCsv} className="text-sm border rounded px-3 py-1.5 hover:bg-slate-100">
+              Export CSV
+            </button>
+          </div>
 
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <table className="w-full text-sm">

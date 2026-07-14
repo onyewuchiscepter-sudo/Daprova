@@ -9,6 +9,7 @@ import * as dataQualityService from '../services/dataQualityService.js';
 import * as reportService from '../services/reportService.js';
 import * as paymentService from '../services/paymentService.js';
 import { isFunderTemplateKey } from '../services/reports/templateRegistry.js';
+import { toCsv } from '../lib/csv.js';
 
 export const cohortsRouter = Router();
 cohortsRouter.use(requireAuth, requireRole('admin'));
@@ -45,6 +46,34 @@ cohortsRouter.patch('/:id', async (req, res, next) => {
 cohortsRouter.get('/:id/learners', async (req, res, next) => {
   try {
     res.json(await cohortService.listCohortLearners(req.auth!.org_id!, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Raw per-learner roster export — distinct from the aggregate funder
+// PDF/Word reports (reportService.ts), which never expose individual names.
+cohortsRouter.get('/:id/learners/export.csv', async (req, res, next) => {
+  try {
+    const learners = await cohortService.listCohortLearners(req.auth!.org_id!, req.params.id);
+    const rows = learners.map((l) => ({
+      ...l,
+      gain: l.pre_score !== null && l.post_score !== null ? Math.round((Number(l.post_score) - Number(l.pre_score)) * 100) / 100 : null,
+    }));
+    const csv = toCsv(rows, [
+      { key: 'display_name', label: 'Name' },
+      { key: 'enrolment_id', label: 'Enrolment ID' },
+      { key: 'gender', label: 'Gender' },
+      { key: 'age_group', label: 'Age group' },
+      { key: 'location_type', label: 'Location' },
+      { key: 'disability', label: 'Disability' },
+      { key: 'pre_status', label: 'Pre-assessment status' },
+      { key: 'pre_score', label: 'Pre-assessment score' },
+      { key: 'post_status', label: 'Post-assessment status' },
+      { key: 'post_score', label: 'Post-assessment score' },
+      { key: 'gain', label: 'Gain' },
+    ]);
+    res.set('Content-Type', 'text/csv').set('Content-Disposition', 'attachment; filename="learners.csv"').send(csv);
   } catch (err) {
     next(err);
   }
