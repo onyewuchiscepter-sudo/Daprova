@@ -31,6 +31,17 @@ export async function issueSession(personId: string, orgId: string) {
     .executeTakeFirst();
   if (!membership) throw forbidden('Not a member of that organisation');
 
+  // docs/org-onboarding-spec.md §7.2 — suspending an org "blocks all its
+  // org_memberships from logging in" without touching any data. Checked
+  // here rather than only at /auth/verify since this is the one function
+  // every session-issuing path (verify, select-org, switch-org, refresh,
+  // invite-accept) already goes through — a suspension takes effect for an
+  // already-logged-in person the next time their token refreshes, not just
+  // on their next fresh login.
+  const org = await db.selectFrom('organisations').select(['billing_status', 'deleted_at']).where('id', '=', orgId).executeTakeFirst();
+  if (!org || org.deleted_at) throw forbidden('Organisation not found');
+  if (org.billing_status === 'suspended') throw forbidden('This organisation has been suspended');
+
   const sessionToken = signSessionToken({ sub: person.id, org_id: membership.org_id, role: membership.role as 'admin' | 'viewer' });
 
   const jti = newRefreshJti();

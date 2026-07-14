@@ -3,15 +3,20 @@ import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
+import { getTier } from './pricingService.js';
 
 export async function listOrgs() {
   return db
     .selectFrom('organisations')
-    .select(['id', 'name', 'slug', 'contact_email', 'created_at', 'deleted_at'])
+    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'created_at', 'deleted_at'])
     .orderBy('created_at', 'desc')
     .execute();
 }
 
+// docs/org-onboarding-spec.md §7.2 — "view any org's full profile, members,
+// billing, cohorts." Billing fields are already on the org row itself
+// (selectAll above); cohorts are added here so a platform admin can see
+// what they'd actually be overriding before taking a tier-override action.
 export async function getOrgDetail(orgId: string) {
   const org = await db.selectFrom('organisations').selectAll().where('id', '=', orgId).executeTakeFirst();
   if (!org) throw notFound('Organisation not found');
@@ -24,7 +29,16 @@ export async function getOrgDetail(orgId: string) {
     .where('org_memberships.deleted_at', 'is', null)
     .execute();
 
-  return { ...org, members };
+  const cohorts = await db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.student_count', 'cohorts.plan_tier_at_creation', 'cohorts.is_free_trial'])
+    .where('courses.org_id', '=', orgId)
+    .where('cohorts.deleted_at', 'is', null)
+    .orderBy('cohorts.created_at', 'desc')
+    .execute();
+
+  return { ...org, members, cohorts };
 }
 
 // Model B (docs/org-onboarding-spec.md §1): a Daprova team member creates
@@ -141,5 +155,141 @@ export async function reviewFraudFlag(reviewerPersonId: string, flagId: string, 
     details: { flag_id: flagId, matched_org_id: flag.matched_org_id, match_reason: flag.match_reason, decision },
   });
 
+  return updated;
+}
+
+async function assertOrgExists(orgId: string) {
+  const org = await db.selectFrom('organisations').selectAll().where('id', '=', orgId).executeTakeFirst();
+  if (!org) throw notFound('Organisation not found');
+  return org;
+}
+
+// docs/org-onboarding-spec.md §7.2 — owner-only org-regulation actions.
+// Suspension is enforced where every login-completing path already
+// converges (lib/sessionIssuance.ts's issueSession), not re-implemented
+// here — this function only flips the flag and logs it.
+export async function suspendOrg(actorPersonId: string, orgId: string) {
+  await assertOrgExists(orgId);
+  const org = await db
+    .updateTable('organisations')
+    .set({ billing_status: 'suspended' })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_suspended', details: null });
+  return org;
+}
+
+export async function reactivateOrg(actorPersonId: string, orgId: string) {
+  const org = await assertOrgExists(orgId);
+  if (org.billing_status !== 'suspended') throw badRequest('Organisation is not currently suspended');
+  const updated = await db
+    .updateTable('organisations')
+    .set({ billing_status: 'active' })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_reactivated', details: null });
+  return updated;
+}
+
+// "Override an org's plan tier" (§7.2) is implemented as overriding a
+// specific cohort's tier — pricing is per-cohort (§5.7, Sprint 4), so an
+// org-wide field wouldn't actually change what checkCapacity/hasFeature
+// enforce. Bypasses the normal upgrade-path/payment flow entirely, as the
+// spec describes ("manual correction or comping a customer").
+export async function overrideCohortTier(actorPersonId: string, orgId: string, cohortId: string, newTierId: string) {
+  const cohort = await db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .selectAll('cohorts')
+    .where('cohorts.id', '=', cohortId)
+    .where('courses.org_id', '=', orgId)
+    .executeTakeFirst();
+  if (!cohort) throw notFound('Cohort not found in this organisation');
+
+  const tier = await getTier(newTierId);
+
+  const updated = await db
+    .updateTable('cohorts')
+    .set({ plan_tier_at_creation: tier.tier_id, status: cohort.status === 'locked_pending_upgrade' ? 'active' : cohort.status })
+    .where('id', '=', cohortId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await db
+    .insertInto('cohort_tier_history')
+    .values({ cohort_id: cohortId, old_tier: cohort.plan_tier_at_creation, new_tier: tier.tier_id, payment_id: null })
+    .execute();
+
+  await writeAuditLog({
+    actorPersonId,
+    actorContext: 'platform_admin',
+    orgId,
+    action: 'tier_overridden',
+    details: { cohort_id: cohortId, old_tier: cohort.plan_tier_at_creation, new_tier: tier.tier_id },
+  });
+
+  return updated;
+}
+
+const VALID_BILLING_STATUSES = ['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended'] as const;
+
+// "Manually correct billing status" (§7.2) — e.g. confirming an offline
+// bank-transfer payment for an Enterprise deal by moving it out of
+// pending_manual_quote without going through the (self-serve-only) payment
+// flow. Deliberately separate from suspend/reactivate above, which cover
+// the one status transition platform staff take most often and are worth
+// naming explicitly in the audit log rather than folding into this generic action.
+export async function correctBillingStatus(actorPersonId: string, orgId: string, newStatus: string) {
+  if (!VALID_BILLING_STATUSES.includes(newStatus as (typeof VALID_BILLING_STATUSES)[number])) {
+    throw badRequest(`Invalid billing status: ${newStatus}`);
+  }
+  const org = await assertOrgExists(orgId);
+  const updated = await db
+    .updateTable('organisations')
+    .set({ billing_status: newStatus })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({
+    actorPersonId,
+    actorContext: 'platform_admin',
+    orgId,
+    action: 'billing_status_corrected',
+    details: { old_status: org.billing_status, new_status: newStatus },
+  });
+  return updated;
+}
+
+// "Extend or grant a free-trial exception" (§7.2) — goodwill override of
+// §5.4's one-time rule. Resets the flag rather than directly assigning
+// FREE_TRIAL to a cohort, so the existing assignTierForNewCohort logic
+// naturally grants it again the next time this org creates a cohort —
+// no special-casing needed anywhere else.
+export async function extendFreeTrial(actorPersonId: string, orgId: string) {
+  await assertOrgExists(orgId);
+  const updated = await db
+    .updateTable('organisations')
+    .set({ has_used_free_trial: false })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'free_trial_extended', details: null });
+  return updated;
+}
+
+// "Close/delete an org" (§7.2) — soft delete, same pattern used throughout
+// the schema. Historical data (cohorts, learners, reports) is untouched;
+// only the org itself and its memberships stop being usable for login
+// (issueSession already rejects a deleted org, same as a suspended one).
+export async function closeOrg(actorPersonId: string, orgId: string) {
+  await assertOrgExists(orgId);
+  const updated = await db
+    .updateTable('organisations')
+    .set({ deleted_at: sql`now()` })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_closed', details: null });
   return updated;
 }

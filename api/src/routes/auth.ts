@@ -16,6 +16,10 @@ async function listMemberships(personId: string) {
     .where('org_memberships.person_id', '=', personId)
     .where('org_memberships.deleted_at', 'is', null)
     .where('organisations.deleted_at', 'is', null)
+    // A suspended org isn't offered as a login option at all (issueSession
+    // enforces the same rule regardless, but there's no reason to show it
+    // in the picker only to have selecting it fail).
+    .where('organisations.billing_status', '!=', 'suspended')
     .execute();
 }
 

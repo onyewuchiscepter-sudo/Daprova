@@ -73,3 +73,63 @@ platformRouter.post('/fraud-flags/:id/review', async (req, res, next) => {
     next(err);
   }
 });
+
+// docs/org-onboarding-spec.md §7.2 — everything below is `owner`-only.
+// Re-applying requirePlatformRole here (rather than relying only on the
+// router-level support+owner gate above) is what actually narrows it —
+// `support` can view and review fraud flags, but not touch billing state.
+const ownerOnly = requirePlatformRole('owner');
+
+platformRouter.post('/orgs/:id/suspend', ownerOnly, async (req, res, next) => {
+  try {
+    res.json(await platformService.suspendOrg(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformRouter.post('/orgs/:id/reactivate', ownerOnly, async (req, res, next) => {
+  try {
+    res.json(await platformService.reactivateOrg(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformRouter.post('/orgs/:id/close', ownerOnly, async (req, res, next) => {
+  try {
+    res.json(await platformService.closeOrg(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformRouter.post('/orgs/:id/extend-free-trial', ownerOnly, async (req, res, next) => {
+  try {
+    res.json(await platformService.extendFreeTrial(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const correctBillingStatusSchema = z.object({ status: z.enum(['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended']) });
+platformRouter.post('/orgs/:id/billing-status', ownerOnly, async (req, res, next) => {
+  try {
+    const body = correctBillingStatusSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    res.json(await platformService.correctBillingStatus(req.auth!.sub, req.params.id, body.data.status));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const overrideTierSchema = z.object({ cohort_id: z.string().uuid(), new_tier: z.string().min(1) });
+platformRouter.post('/orgs/:id/override-tier', ownerOnly, async (req, res, next) => {
+  try {
+    const body = overrideTierSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    res.json(await platformService.overrideCohortTier(req.auth!.sub, req.params.id, body.data.cohort_id, body.data.new_tier));
+  } catch (err) {
+    next(err);
+  }
+});

@@ -132,14 +132,19 @@ async function renderMain(status) {
     <div class="card">
       ${loadError ? `<p class="error">${loadError}</p>` : ''}
       <table>
-        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Created</th></tr></thead>
+        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Billing status</th><th>Created</th><th></th></tr></thead>
         <tbody>
           ${orgs
             .map(
-              (o) =>
-                `<tr><td>${o.name}</td><td>${o.slug}</td><td>${o.contact_email}</td><td>${new Date(o.created_at).toLocaleDateString()}</td></tr>`,
+              (o) => `
+            <tr>
+              <td>${o.name}${o.deleted_at ? ' <span class="muted">(closed)</span>' : ''}</td>
+              <td>${o.slug}</td><td>${o.contact_email}</td><td>${o.billing_status ?? ''}</td>
+              <td>${new Date(o.created_at).toLocaleDateString()}</td>
+              <td><button class="manage-btn" data-id="${o.id}">Manage</button></td>
+            </tr>`,
             )
-            .join('') || '<tr><td colspan="4" class="muted">No organisations yet.</td></tr>'}
+            .join('') || '<tr><td colspan="6" class="muted">No organisations yet.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -190,6 +195,126 @@ async function renderMain(status) {
       } catch (err) {
         await renderMain({ flagError: err.message });
       }
+    });
+  });
+
+  document.querySelectorAll('.manage-btn').forEach((btn) => {
+    btn.addEventListener('click', () => renderOrgDetail(btn.dataset.id));
+  });
+}
+
+// docs/org-onboarding-spec.md §7.2 — org regulation actions. `support` can
+// view this page; the mutating buttons below are `owner`-only server-side
+// (platform.ts's `ownerOnly` gate) — a `support` admin sees the same
+// buttons but gets a clean 403 message if they try one, rather than this
+// page trying to duplicate the role check.
+async function renderOrgDetail(orgId, status) {
+  let org;
+  try {
+    org = await api(`/api/v1/platform/orgs/${orgId}`);
+  } catch (err) {
+    render(`<h1>Daprova Platform</h1><p class="error">${err.message}</p><button id="back-btn">Back</button>`);
+    document.getElementById('back-btn').addEventListener('click', () => renderMain());
+    return;
+  }
+
+  const isSuspended = org.billing_status === 'suspended';
+
+  render(`
+    <h1>Daprova Platform</h1>
+    <button id="back-btn">&larr; Back to organisations</button>
+    <h2>${org.name} ${org.deleted_at ? '<span class="muted">(closed)</span>' : ''}</h2>
+    <div class="card">
+      <p><strong>Slug:</strong> ${org.slug} &nbsp; <strong>Billing status:</strong> ${org.billing_status} &nbsp;
+         <strong>Free trial used:</strong> ${org.has_used_free_trial ? 'yes' : 'no'} &nbsp;
+         <strong>Signup review:</strong> ${org.signup_review_status ?? 'none'}</p>
+      ${status?.error ? `<p class="error">${status.error}</p>` : ''}
+      ${status?.success ? `<p class="muted">${status.success}</p>` : ''}
+      <div class="actions">
+        ${
+          isSuspended
+            ? '<button id="reactivate-btn">Reactivate org</button>'
+            : '<button id="suspend-btn">Suspend org</button>'
+        }
+        <button id="extend-trial-btn">Grant free-trial exception</button>
+        <button id="close-org-btn">Close org</button>
+      </div>
+    </div>
+
+    <h3>Members</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
+        <tbody>
+          ${org.members.map((m) => `<tr><td>${m.email}</td><td>${m.display_name ?? ''}</td><td>${m.role}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No members.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Cohorts</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Name</th><th>Status</th><th>Students</th><th>Tier</th><th>Override to</th></tr></thead>
+        <tbody>
+          ${org.cohorts
+            .map(
+              (c) => `
+            <tr>
+              <td>${c.name}</td><td>${c.status}</td><td>${c.student_count}</td><td>${c.plan_tier_at_creation ?? '(none)'}</td>
+              <td>
+                <select class="tier-select" data-cohort-id="${c.id}">
+                  ${['FREE_TRIAL', 'ENTRY', 'GROWTH', 'SCALE_1', 'SCALE_2', 'ENTERPRISE'].map((t) => `<option value="${t}">${t}</option>`).join('')}
+                </select>
+                <button class="override-tier-btn" data-cohort-id="${c.id}">Override</button>
+              </td>
+            </tr>`,
+            )
+            .join('') || '<tr><td colspan="5" class="muted">No cohorts.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Manually correct billing status</h3>
+    <div class="card">
+      <select id="billing-status-select">
+        ${['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended'].map((s) => `<option value="${s}" ${s === org.billing_status ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+      <button id="correct-billing-btn">Apply</button>
+    </div>
+  `);
+
+  document.getElementById('back-btn').addEventListener('click', () => renderMain());
+
+  const act = async (fn) => {
+    try {
+      await fn();
+      await renderOrgDetail(orgId, { success: 'Done.' });
+    } catch (err) {
+      await renderOrgDetail(orgId, { error: err.message });
+    }
+  };
+
+  document.getElementById('suspend-btn')?.addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/suspend`, { method: 'POST' })));
+  document.getElementById('reactivate-btn')?.addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/reactivate`, { method: 'POST' })));
+  document.getElementById('close-org-btn').addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/close`, { method: 'POST' })));
+  document.getElementById('extend-trial-btn').addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/extend-free-trial`, { method: 'POST' })));
+  document.getElementById('correct-billing-btn').addEventListener('click', () =>
+    act(() =>
+      api(`/api/v1/platform/orgs/${orgId}/billing-status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: document.getElementById('billing-status-select').value }),
+      }),
+    ),
+  );
+  document.querySelectorAll('.override-tier-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const select = document.querySelector(`.tier-select[data-cohort-id="${btn.dataset.cohortId}"]`);
+      act(() =>
+        api(`/api/v1/platform/orgs/${orgId}/override-tier`, {
+          method: 'POST',
+          body: JSON.stringify({ cohort_id: btn.dataset.cohortId, new_tier: select.value }),
+        }),
+      );
     });
   });
 }
