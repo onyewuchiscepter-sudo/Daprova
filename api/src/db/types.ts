@@ -258,6 +258,19 @@ export interface CohortTierHistoryTable {
   payment_id: string | null;
 }
 
+export interface PaymentsTable {
+  id: Generated<string>;
+  org_id: string;
+  cohort_id: string;
+  amount: string;
+  status: Generated<string>; // pending | confirmed | failed
+  provider: string; // paystack | flutterwave | stub
+  reference: string;
+  target_tier: string;
+  paid_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+}
+
 export interface SignupFraudFlagsTable {
   id: Generated<string>;
   org_id: string;
@@ -279,6 +292,7 @@ export interface Database {
   plan_tiers: PlanTiersTable;
   cohort_tier_history: CohortTierHistoryTable;
   signup_fraud_flags: SignupFraudFlagsTable;
+  payments: PaymentsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

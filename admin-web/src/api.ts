@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:4001';
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:4001';
 
 let sessionToken: string | null = null;
 export function setSessionToken(token: string | null) {

@@ -12,10 +12,29 @@ export type PlanTier = {
   features: string[];
 };
 
-async function getTier(tierId: string): Promise<PlanTier> {
+export async function getTier(tierId: string): Promise<PlanTier> {
   const row = await db.selectFrom('plan_tiers').selectAll().where('tier_id', '=', tierId).executeTakeFirst();
   if (!row) throw notFound(`Unknown plan tier: ${tierId}`);
   return { ...row, features: row.features as string[] };
+}
+
+// The upgrade path a paid cohort actually follows. FREE_TRIAL is
+// deliberately not its own rung — it shares ENTRY's student range (1-50),
+// so "the next tier after FREE_TRIAL" needs to be GROWTH, not ENTRY (which
+// would still be at the same cap the cohort just hit).
+const UPGRADE_PATH = ['ENTRY', 'GROWTH', 'SCALE_1', 'SCALE_2', 'ENTERPRISE'] as const;
+
+// docs/org-onboarding-spec.md §5.6 step 1 — "cohort reaches a tier
+// requiring payment": the next rung up from wherever it is now. Throws if
+// already at the top of the self-serve path (Enterprise has no fixed price
+// — that's a sales conversation, §5.5, not a payment to collect).
+export async function getNextTier(currentTierId: string): Promise<PlanTier> {
+  const normalized = currentTierId === 'FREE_TRIAL' ? 'ENTRY' : currentTierId;
+  const index = UPGRADE_PATH.indexOf(normalized as (typeof UPGRADE_PATH)[number]);
+  if (index === -1 || index === UPGRADE_PATH.length - 1) {
+    throw badRequest('This cohort is already at the top of the self-serve pricing path — contact sales for a custom quote.');
+  }
+  return getTier(UPGRADE_PATH[index + 1]);
 }
 
 // Excludes FREE_TRIAL deliberately — that tier is only ever assigned via

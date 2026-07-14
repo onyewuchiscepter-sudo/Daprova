@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { apiFetch, apiFetchBlob } from '../api';
+import { apiFetch, apiFetchBlob, API_BASE } from '../api';
 
 type Cohort = {
   id: string;
@@ -157,6 +157,18 @@ export default function CohortDashboardPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
 
+  // docs/org-onboarding-spec.md §5.6 — opens the (stub) provider's checkout
+  // page in a new tab, same as a real Paystack/Flutterwave redirect would.
+  // Re-fetches the cohort afterward so the "locked pending upgrade" banner
+  // shows up immediately rather than waiting for the next 5s poll.
+  const upgradeMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/cohorts/${id}/upgrade`, { method: 'POST' }),
+    onSuccess: (result) => {
+      window.open(`${API_BASE}${result.checkoutUrl}`, '_blank');
+      queryClient.invalidateQueries({ queryKey: ['cohort', id] });
+    },
+  });
+
   const [reportForm, setReportForm] = useState<NarrativeFields>({ background: '', challenges: '', next_steps: '' });
   const [reportTemplate, setReportTemplate] = useState('');
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -214,16 +226,37 @@ export default function CohortDashboardPage() {
       <h1 className="text-lg font-semibold text-slate-900 mb-1">{cohort.name}</h1>
       <p className="text-sm text-slate-500 mb-6 capitalize">{cohort.status}</p>
 
-      {cohort.capacity_status !== 'allow' && (
-        <div
-          className={`mb-6 rounded-md px-4 py-3 text-sm ${
-            cohort.capacity_status === 'block' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
-          }`}
-        >
-          {cohort.capacity_status === 'block'
-            ? `This cohort has reached its plan's limit of ${cohort.max_students} students — upgrade to enrol more.`
-            : `This cohort is approaching its plan's limit (${cohort.total_enrolled}/${cohort.max_students} students) — consider upgrading soon.`}
+      {cohort.status === 'locked_pending_upgrade' ? (
+        <div className="mb-6 rounded-md px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200">
+          This cohort is locked pending an upgrade payment. Existing data stays visible, but no new students or attempts can be recorded until the
+          payment clears.
         </div>
+      ) : (
+        cohort.capacity_status !== 'allow' && (
+          <div
+            className={`mb-6 rounded-md px-4 py-3 text-sm flex items-center justify-between gap-4 ${
+              cohort.capacity_status === 'block' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+            }`}
+          >
+            <span>
+              {cohort.capacity_status === 'block'
+                ? `This cohort has reached its plan's limit of ${cohort.max_students} students — upgrade to enrol more.`
+                : `This cohort is approaching its plan's limit (${cohort.total_enrolled}/${cohort.max_students} students) — consider upgrading soon.`}
+            </span>
+            {cohort.capacity_status === 'block' && (
+              <button
+                onClick={() => upgradeMutation.mutate()}
+                disabled={upgradeMutation.isPending}
+                className="shrink-0 bg-slate-900 text-white text-xs rounded px-3 py-1.5 disabled:opacity-50"
+              >
+                {upgradeMutation.isPending ? 'Opening checkout…' : 'Upgrade now'}
+              </button>
+            )}
+          </div>
+        )
+      )}
+      {upgradeMutation.isError && (
+        <p className="text-sm text-red-600 mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
       )}
 
       <div className="grid grid-cols-2 gap-4 mb-6">

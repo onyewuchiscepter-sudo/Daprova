@@ -7,6 +7,7 @@ import * as cohortService from '../services/cohortService.js';
 import * as analyticsService from '../services/analyticsService.js';
 import * as dataQualityService from '../services/dataQualityService.js';
 import * as reportService from '../services/reportService.js';
+import * as paymentService from '../services/paymentService.js';
 import { isFunderTemplateKey } from '../services/reports/templateRegistry.js';
 
 export const cohortsRouter = Router();
@@ -121,6 +122,16 @@ cohortsRouter.post('/:id/reports', async (req, res, next) => {
 cohortsRouter.get('/:id/reports', async (req, res, next) => {
   try {
     res.json(await reportService.listReports(req.auth!.org_id, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// docs/org-onboarding-spec.md §5.6 — surfaced from the "block" capacity
+// banner (CohortDashboardPage.tsx) as an "Upgrade now" action.
+cohortsRouter.post('/:id/upgrade', async (req, res, next) => {
+  try {
+    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id, req.params.id));
   } catch (err) {
     next(err);
   }
