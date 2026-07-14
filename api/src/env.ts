@@ -38,6 +38,10 @@ export const env = {
   // the route always 404s; it also self-disables once any organisation
   // exists, so it can't function as a standing backdoor either way.
   bootstrapSecret: process.env.BOOTSTRAP_SECRET,
+  // Sprint 3 (docs/org-onboarding-spec.md §8) — sends teammate-invite
+  // emails. Not needed for Model B, which hands out credentials directly.
+  resendApiKey: process.env.RESEND_API_KEY,
+  inviteFromEmail: process.env.INVITE_FROM_EMAIL ?? 'onboarding@daprova.com',
 };
 
 // Fail fast rather than silently run production traffic on known dev secrets

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 import { useAuth } from '../auth';
 
 export default function LoginPage() {
@@ -9,6 +11,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState('devpassword123');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setError('Enter your email above first, then click "Forgot password?"');
+      return;
+    }
+    setError(null);
+    setResetMessage(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage('Password reset email sent — check your inbox.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send reset email');
+    }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -84,8 +102,12 @@ export default function LoginPage() {
           placeholder="Password"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {resetMessage && <p className="text-sm text-emerald-600">{resetMessage}</p>}
         <button type="submit" disabled={submitting} className="w-full bg-slate-900 text-white rounded px-3 py-2 disabled:opacity-50">
           {submitting ? 'Signing in…' : 'Sign in'}
+        </button>
+        <button type="button" onClick={handleForgotPassword} className="w-full text-xs text-slate-500 underline">
+          Forgot password?
         </button>
         <p className="text-xs text-slate-400">Seed users via `npm run seed --workspace=api` first.</p>
       </form>

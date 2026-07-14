@@ -21,6 +21,10 @@ type AuthState = {
   selectOrg: (orgId: string) => Promise<void>;
   switchOrg: (orgId: string) => Promise<void>;
   signOut: () => Promise<void>;
+  // Exposes applySession for flows that establish a session outside the
+  // normal sign-in form — currently just AcceptInvitePage, which gets a
+  // { session_token, user } pair back from POST /invites/:token/accept.
+  completeSession: (result: { session_token: string; user: User }) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -146,7 +150,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, org, memberships, pendingOrgSelection, loading, restoring, error, signIn, selectOrg, switchOrg, signOut }}
+      value={{
+        user,
+        org,
+        memberships,
+        pendingOrgSelection,
+        loading,
+        restoring,
+        error,
+        signIn,
+        selectOrg,
+        switchOrg,
+        signOut,
+        completeSession: applySession,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -210,12 +210,25 @@ export interface AuditLogTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface InvitesTable {
+  id: Generated<string>;
+  org_id: string;
+  email: string;
+  role: string; // admin | viewer
+  token: string;
+  invited_by: string | null;
+  expires_at: Timestamp;
+  accepted_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
   org_memberships: OrgMembershipsTable;
   platform_admins: PlatformAdminsTable;
   audit_log: AuditLogTable;
+  invites: InvitesTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
   competency_frameworks: CompetencyFrameworksTable;

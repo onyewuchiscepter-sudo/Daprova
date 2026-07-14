@@ -26,6 +26,9 @@ export default function Layout() {
           <Link to="/frameworks" className="text-sm text-slate-600 hover:text-slate-900">
             Frameworks
           </Link>
+          <Link to="/team" className="text-sm text-slate-600 hover:text-slate-900">
+            Team
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-sm text-slate-600">
           {memberships.length > 1 ? (

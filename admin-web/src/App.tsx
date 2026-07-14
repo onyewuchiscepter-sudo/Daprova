@@ -9,6 +9,8 @@ import CoursesListPage from './pages/CoursesListPage';
 import NewCoursePage from './pages/NewCoursePage';
 import CourseDetailPage from './pages/CourseDetailPage';
 import CohortDashboardPage from './pages/CohortDashboardPage';
+import TeamPage from './pages/TeamPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, restoring } = useAuth();
@@ -21,6 +23,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
       <Route
         element={
           <RequireAuth>
@@ -35,6 +38,7 @@ function AppRoutes() {
         <Route path="/courses/new" element={<NewCoursePage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/cohorts/:id" element={<CohortDashboardPage />} />
+        <Route path="/team" element={<TeamPage />} />
         <Route path="/" element={<Navigate to="/courses" replace />} />
       </Route>
     </Routes>

@@ -2,26 +2,11 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { requireAuth } from '../middleware/auth.js';
-import { unauthorized, notFound, badRequest, forbidden } from '../lib/errors.js';
-import {
-  newRefreshJti,
-  signRefreshToken,
-  signSessionToken,
-  signOrgSelectionToken,
-  verifyOrgSelectionToken,
-  verifyRefreshToken,
-  REFRESH_TOKEN_TTL_MS,
-} from '../lib/sessionTokens.js';
+import { unauthorized, notFound, badRequest } from '../lib/errors.js';
+import { signOrgSelectionToken, verifyOrgSelectionToken, verifyRefreshToken } from '../lib/sessionTokens.js';
+import { issueSession, REFRESH_COOKIE, refreshCookieOpts as cookieOpts } from '../lib/sessionIssuance.js';
 
 export const authRouter = Router();
-
-const REFRESH_COOKIE = 'daprova_refresh';
-const cookieOpts = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/api/v1/auth',
-};
 
 async function listMemberships(personId: string) {
   return db
@@ -32,34 +17,6 @@ async function listMemberships(personId: string) {
     .where('org_memberships.deleted_at', 'is', null)
     .where('organisations.deleted_at', 'is', null)
     .execute();
-}
-
-// A session is always scoped to exactly one org membership — a person who
-// belongs to more than one (docs/org-onboarding-spec.md §2) picks which via
-// /auth/select-org or /auth/switch-org, but every issued session/refresh
-// token pair remembers that choice explicitly (refresh_tokens.org_id),
-// since it can no longer be derived implicitly from the person alone.
-async function issueSession(personId: string, orgId: string) {
-  const person = await db.selectFrom('people').selectAll().where('id', '=', personId).where('deleted_at', 'is', null).executeTakeFirst();
-  if (!person) throw notFound('Person not found');
-
-  const membership = await db
-    .selectFrom('org_memberships')
-    .selectAll()
-    .where('person_id', '=', personId)
-    .where('org_id', '=', orgId)
-    .where('deleted_at', 'is', null)
-    .executeTakeFirst();
-  if (!membership) throw forbidden('Not a member of that organisation');
-
-  const sessionToken = signSessionToken({ sub: person.id, org_id: membership.org_id, role: membership.role as 'admin' | 'viewer' });
-
-  const jti = newRefreshJti();
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
-  await db.insertInto('refresh_tokens').values({ person_id: person.id, org_id: membership.org_id, jti, expires_at: expiresAt }).execute();
-  const refreshToken = signRefreshToken(person.id, jti);
-
-  return { sessionToken, refreshToken, jti, person, membership };
 }
 
 // B5.1 steps 3-6: verify the Firebase/emulator-issued ID token, then issue our own

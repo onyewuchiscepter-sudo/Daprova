@@ -13,6 +13,7 @@ import { assessRouter } from './routes/assess.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { bootstrapRouter } from './routes/bootstrap.js';
 import { platformRouter } from './routes/platform.js';
+import { invitesRouter } from './routes/invites.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 import { runMigrationsToLatest } from './db/migrate.js';
@@ -41,6 +42,7 @@ app.use('/api/v1/assess', publicLimiter, assessRouter);
 app.use('/api/v1/webhooks', publicLimiter, webhooksRouter);
 app.use('/api/v1/bootstrap', publicLimiter, bootstrapRouter);
 app.use('/api/v1/platform', adminLimiter, platformRouter);
+app.use('/api/v1/invites', publicLimiter, invitesRouter);
 
 app.use(errorHandler);
 
