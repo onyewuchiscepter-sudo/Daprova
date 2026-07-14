@@ -16,7 +16,7 @@ reportsRouter.get('/templates', (_req, res) => {
 
 reportsRouter.get('/:id', async (req, res, next) => {
   try {
-    res.json(await reportService.getReport(req.auth!.org_id, req.params.id));
+    res.json(await reportService.getReport(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -28,7 +28,7 @@ reportsRouter.get('/:id/download/:format', async (req, res, next) => {
   try {
     const format = req.params.format;
     if (format !== 'pdf' && format !== 'docx') throw badRequest('Format must be pdf or docx');
-    const buf = await reportService.getReportFile(req.auth!.org_id, req.params.id, format);
+    const buf = await reportService.getReportFile(req.auth!.org_id!, req.params.id, format);
     res.setHeader('Content-Type', CONTENT_TYPES[format]);
     res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.id}.${format}"`);
     res.send(buf);
@@ -47,7 +47,7 @@ const narrativeSchema = z.object({
 reportsRouter.patch('/:id/narrative', async (req, res, next) => {
   try {
     const body = narrativeSchema.parse(req.body);
-    res.json(await reportService.regenerateReport(req.auth!.org_id, req.params.id, body.narrative));
+    res.json(await reportService.regenerateReport(req.auth!.org_id!, req.params.id, body.narrative));
   } catch (err) {
     next(err instanceof z.ZodError ? badRequest('Invalid request body', err.flatten()) : err);
   }

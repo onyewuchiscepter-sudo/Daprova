@@ -34,7 +34,7 @@ impersonationRouter.post('/start', requireAuth, requirePlatformRole('support', '
 impersonationRouter.post('/end', requireAuth, async (req, res, next) => {
   try {
     if (!req.auth?.impersonation) throw forbidden('Not an impersonation session');
-    await impersonationService.endImpersonation(req.auth.impersonation.platform_admin_person_id, req.auth.org_id, req.auth.impersonation.session_id);
+    await impersonationService.endImpersonation(req.auth.impersonation.platform_admin_person_id, req.auth.org_id!, req.auth.impersonation.session_id);
     res.status(204).send();
   } catch (err) {
     next(err);

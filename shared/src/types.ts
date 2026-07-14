@@ -10,8 +10,13 @@ export type ApiError = {
 
 export type SessionClaims = {
   sub: string; // people.id — for an impersonation session, this is the TARGET member's id, not the platform admin's (docs/org-onboarding-spec.md §7.3): the point is to act/view exactly as that member, bounded by their own role. The platform admin's real identity is tracked separately via `impersonation` below and impersonation_sessions.platform_admin_person_id.
-  org_id: string; // the org this session is scoped to (a person may belong to more than one)
-  role: Role;
+  // Absent for a platform-admin-only session (docs/org-onboarding-spec.md
+  // §7.1) — platform staff are "deliberately separate from org_memberships,
+  // since platform staff aren't scoped to any one org." Every org-scoped
+  // route is gated by requireRole, which already rejects an undefined role
+  // cleanly, so no route needs special-casing for this.
+  org_id?: string; // the org this session is scoped to (a person may belong to more than one)
+  role?: Role;
   impersonation?: {
     session_id: string; // impersonation_sessions.id
     mode: 'write' | 'read_only';

@@ -23,7 +23,7 @@ orgRouter.get('/me', requireAuth, async (req, res, next) => {
       .select(['people.id', 'people.email', 'people.display_name', 'org_memberships.role', 'org_memberships.org_id'])
       .where('people.id', '=', req.auth!.sub)
       .where('people.deleted_at', 'is', null)
-      .where('org_memberships.org_id', '=', req.auth!.org_id)
+      .where('org_memberships.org_id', '=', req.auth!.org_id!)
       .where('org_memberships.deleted_at', 'is', null)
       .executeTakeFirst();
     if (!row) throw notFound('User not found');
@@ -40,7 +40,7 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
     const org = await db
       .selectFrom('organisations')
       .selectAll()
-      .where('id', '=', req.auth!.org_id)
+      .where('id', '=', req.auth!.org_id!)
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     if (!org) throw notFound('Organisation not found');
@@ -80,7 +80,7 @@ orgRouter.patch('/org', requireAuth, requireRole('admin'), async (req, res, next
   try {
     const body = updateOrgSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
-    const org = await orgTeamService.updateOrgProfile(req.auth!.org_id, body.data);
+    const org = await orgTeamService.updateOrgProfile(req.auth!.org_id!, body.data);
     res.json({ id: org.id, name: org.name, slug: org.slug, logo_url: org.logo_url, contact_email: org.contact_email });
   } catch (err) {
     next(err);
@@ -92,8 +92,8 @@ orgRouter.patch('/org', requireAuth, requireRole('admin'), async (req, res, next
 orgRouter.get('/org/users', requireAuth, requireRole('admin'), async (req, res, next) => {
   try {
     const [members, pendingInvites] = await Promise.all([
-      orgTeamService.listMembers(req.auth!.org_id),
-      orgTeamService.listPendingInvites(req.auth!.org_id),
+      orgTeamService.listMembers(req.auth!.org_id!),
+      orgTeamService.listPendingInvites(req.auth!.org_id!),
     ]);
     res.json({ members, pending_invites: pendingInvites });
   } catch (err) {
@@ -108,12 +108,12 @@ orgRouter.post('/org/users/invite', requireAuth, requireRole('admin'), async (re
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
 
     const [org, inviter] = await Promise.all([
-      db.selectFrom('organisations').select('name').where('id', '=', req.auth!.org_id).executeTakeFirstOrThrow(),
+      db.selectFrom('organisations').select('name').where('id', '=', req.auth!.org_id!).executeTakeFirstOrThrow(),
       db.selectFrom('people').select('email').where('id', '=', req.auth!.sub).executeTakeFirstOrThrow(),
     ]);
 
     await orgTeamService.inviteMember(
-      req.auth!.org_id,
+      req.auth!.org_id!,
       req.auth!.sub,
       org.name,
       inviter.email,
@@ -131,7 +131,7 @@ orgRouter.patch('/org/users/:id/role', requireAuth, requireRole('admin'), async 
   try {
     const body = roleSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
-    const membership = await orgTeamService.changeRole(req.auth!.org_id, req.params.id, body.data.role, req.auth!.sub);
+    const membership = await orgTeamService.changeRole(req.auth!.org_id!, req.params.id, body.data.role, req.auth!.sub);
     res.json({ id: membership.id, role: membership.role });
   } catch (err) {
     next(err);
@@ -140,7 +140,7 @@ orgRouter.patch('/org/users/:id/role', requireAuth, requireRole('admin'), async 
 
 orgRouter.delete('/org/users/:id', requireAuth, requireRole('admin'), async (req, res, next) => {
   try {
-    await orgTeamService.removeMember(req.auth!.org_id, req.params.id, req.auth!.sub);
+    await orgTeamService.removeMember(req.auth!.org_id!, req.params.id, req.auth!.sub);
     res.status(204).send();
   } catch (err) {
     next(err);

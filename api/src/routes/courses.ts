@@ -18,7 +18,7 @@ const createCourseSchema = z.object({ name: z.string().min(1), category: z.strin
 coursesRouter.post('/', async (req, res, next) => {
   try {
     const body = parse(createCourseSchema, req.body);
-    res.status(201).json(await cohortService.createCourse(req.auth!.org_id, body));
+    res.status(201).json(await cohortService.createCourse(req.auth!.org_id!, body));
   } catch (err) {
     next(err);
   }
@@ -26,7 +26,7 @@ coursesRouter.post('/', async (req, res, next) => {
 
 coursesRouter.get('/', async (req, res, next) => {
   try {
-    res.json(await cohortService.listCourses(req.auth!.org_id));
+    res.json(await cohortService.listCourses(req.auth!.org_id!));
   } catch (err) {
     next(err);
   }
@@ -34,7 +34,7 @@ coursesRouter.get('/', async (req, res, next) => {
 
 coursesRouter.get('/:id', async (req, res, next) => {
   try {
-    res.json(await cohortService.getCourse(req.auth!.org_id, req.params.id));
+    res.json(await cohortService.getCourse(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -51,7 +51,7 @@ const createCohortSchema = z.object({
 coursesRouter.post('/:id/cohorts', async (req, res, next) => {
   try {
     const body = parse(createCohortSchema, req.body);
-    res.status(201).json(await cohortService.createCohort(req.auth!.org_id, req.auth!.sub, req.params.id, body));
+    res.status(201).json(await cohortService.createCohort(req.auth!.org_id!, req.auth!.sub, req.params.id, body));
   } catch (err) {
     next(err);
   }
@@ -59,7 +59,7 @@ coursesRouter.post('/:id/cohorts', async (req, res, next) => {
 
 coursesRouter.get('/:id/cohorts', async (req, res, next) => {
   try {
-    res.json(await cohortService.listCohorts(req.auth!.org_id, req.params.id));
+    res.json(await cohortService.listCohorts(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }

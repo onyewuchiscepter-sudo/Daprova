@@ -3,7 +3,7 @@ import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { requireAuth } from '../middleware/auth.js';
 import { unauthorized, notFound, badRequest } from '../lib/errors.js';
-import { signOrgSelectionToken, verifyOrgSelectionToken, verifyRefreshToken } from '../lib/sessionTokens.js';
+import { signOrgSelectionToken, verifyOrgSelectionToken, verifyRefreshToken, signSessionToken } from '../lib/sessionTokens.js';
 import { issueSession, REFRESH_COOKIE, refreshCookieOpts as cookieOpts } from '../lib/sessionIssuance.js';
 
 export const authRouter = Router();
@@ -45,7 +45,26 @@ authRouter.post('/verify', async (req, res, next) => {
     if (!person) throw notFound('No Daprova account provisioned for this login');
 
     const memberships = await listMemberships(person.id);
-    if (memberships.length === 0) throw notFound('No organisation membership for this account');
+
+    if (memberships.length === 0) {
+      // docs/org-onboarding-spec.md §7.1 — platform admins are "deliberately
+      // separate from org_memberships, since platform staff aren't scoped to
+      // any one org." A person with zero org memberships can still log in
+      // here if they're a platform admin; otherwise this really is just an
+      // account with no access to anything, same as before.
+      const platformAdmin = await db.selectFrom('platform_admins').select('id').where('person_id', '=', person.id).executeTakeFirst();
+      if (!platformAdmin) throw notFound('No organisation membership for this account');
+
+      await db.updateTable('people').set({ last_login_at: new Date() }).where('id', '=', person.id).execute();
+
+      // No org context and no refresh-token cookie — platform-web already
+      // doesn't rely on refresh tokens for its own session (a deliberate v1
+      // simplification, see platform-web/app.js), so a plain 24h session
+      // token with no org_id/role is enough here too.
+      const sessionToken = signSessionToken({ sub: person.id });
+      res.json({ session_token: sessionToken, user: { id: person.id, email: person.email, display_name: person.display_name, role: null, org_id: null } });
+      return;
+    }
 
     await db.updateTable('people').set({ last_login_at: new Date() }).where('id', '=', person.id).execute();
 

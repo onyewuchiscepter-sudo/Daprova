@@ -21,7 +21,7 @@ function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {
 
 cohortsRouter.get('/:id', async (req, res, next) => {
   try {
-    res.json(await cohortService.getCohort(req.auth!.org_id, req.params.id));
+    res.json(await cohortService.getCohort(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -36,7 +36,7 @@ const updateCohortSchema = z.object({
 cohortsRouter.patch('/:id', async (req, res, next) => {
   try {
     const body = parse(updateCohortSchema, req.body);
-    res.json(await cohortService.updateCohort(req.auth!.org_id, req.params.id, body));
+    res.json(await cohortService.updateCohort(req.auth!.org_id!, req.params.id, body));
   } catch (err) {
     next(err);
   }
@@ -44,7 +44,7 @@ cohortsRouter.patch('/:id', async (req, res, next) => {
 
 cohortsRouter.get('/:id/learners', async (req, res, next) => {
   try {
-    res.json(await cohortService.listCohortLearners(req.auth!.org_id, req.params.id));
+    res.json(await cohortService.listCohortLearners(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -54,7 +54,7 @@ const regenerateLinkSchema = z.object({ type: z.enum(['pre', 'post']) });
 cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
   try {
     const body = parse(regenerateLinkSchema, req.body);
-    res.json(await cohortService.regenerateLinkToken(req.auth!.org_id, req.params.id, body.type));
+    res.json(await cohortService.regenerateLinkToken(req.auth!.org_id!, req.params.id, body.type));
   } catch (err) {
     next(err);
   }
@@ -73,7 +73,7 @@ const dashboardFiltersSchema = z.object({
 // applying a filter updates every metric here simultaneously.
 cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
   try {
-    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     const filters = parse(dashboardFiltersSchema, req.query);
     const passThreshold = Number(cohort.pass_threshold);
     const [gains, effectSize, competencyBreakdown, passRate] = await Promise.all([
@@ -92,7 +92,7 @@ cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
 // in one response rather than one call per dimension.
 cohortsRouter.get('/:id/equity', async (req, res, next) => {
   try {
-    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     const dimensions = ['gender', 'age_group', 'location_type', 'disability'] as const;
     const breakdowns = await Promise.all(dimensions.map((d) => analyticsService.getEquityBreakdown(cohort.id, d)));
     res.json(breakdowns);
@@ -112,7 +112,7 @@ const generateReportSchema = z.object({
 cohortsRouter.post('/:id/reports', async (req, res, next) => {
   try {
     const body = generateReportSchema.parse(req.body);
-    const report = await reportService.generateReport(req.auth!.org_id, req.params.id, body.template, body.narrative, req.auth!.sub);
+    const report = await reportService.generateReport(req.auth!.org_id!, req.params.id, body.template, body.narrative, req.auth!.sub);
     res.status(201).json(report);
   } catch (err) {
     next(err instanceof z.ZodError ? badRequest('Invalid request body', err.flatten()) : err);
@@ -121,7 +121,7 @@ cohortsRouter.post('/:id/reports', async (req, res, next) => {
 
 cohortsRouter.get('/:id/reports', async (req, res, next) => {
   try {
-    res.json(await reportService.listReports(req.auth!.org_id, req.params.id));
+    res.json(await reportService.listReports(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -131,7 +131,7 @@ cohortsRouter.get('/:id/reports', async (req, res, next) => {
 // banner (CohortDashboardPage.tsx) as an "Upgrade now" action.
 cohortsRouter.post('/:id/upgrade', async (req, res, next) => {
   try {
-    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id, req.params.id));
+    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -142,7 +142,7 @@ cohortsRouter.post('/:id/upgrade', async (req, res, next) => {
 // in this MVP to schedule it automatically).
 cohortsRouter.post('/:id/run-outlier-detection', async (req, res, next) => {
   try {
-    const cohort = await cohortService.getCohort(req.auth!.org_id, req.params.id);
+    const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     res.json(await dataQualityService.runOutlierDetection(cohort.id));
   } catch (err) {
     next(err);
