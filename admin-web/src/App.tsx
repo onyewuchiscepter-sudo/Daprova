@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
 import Layout from './Layout';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import ContactSalesPage from './pages/ContactSalesPage';
@@ -25,6 +26,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/signup/contact-sales" element={<ContactSalesPage />} />
@@ -45,7 +47,6 @@ function AppRoutes() {
         <Route path="/courses/:id" element={<CourseDetailPage />} />
         <Route path="/cohorts/:id" element={<CohortDashboardPage />} />
         <Route path="/team" element={<TeamPage />} />
-        <Route path="/" element={<Navigate to="/courses" replace />} />
       </Route>
     </Routes>
   );
