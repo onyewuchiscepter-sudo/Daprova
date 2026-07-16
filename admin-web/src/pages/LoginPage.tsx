@@ -115,7 +115,6 @@ export default function LoginPage() {
             Sign up
           </a>
         </p>
-        <p className="text-xs text-slate-400">Seed users via `npm run seed --workspace=api` first.</p>
       </form>
     </div>
   );

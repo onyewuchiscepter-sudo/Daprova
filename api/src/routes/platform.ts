@@ -17,6 +17,17 @@ platformRouter.get('/orgs', async (req, res, next) => {
   }
 });
 
+// Must be registered before GET /orgs/:id below — otherwise Express's
+// route-matching order makes /orgs/:id shadow this literal path (the
+// bug this comment is here to prevent regressing).
+platformRouter.get('/orgs/pending-verification', async (_req, res, next) => {
+  try {
+    res.json(await platformService.listPendingVerificationOrgs());
+  } catch (err) {
+    next(err);
+  }
+});
+
 platformRouter.get('/orgs/:id', async (req, res, next) => {
   try {
     res.json(await platformService.getOrgDetail(req.params.id));
@@ -74,6 +85,16 @@ platformRouter.post('/fraud-flags/:id/review', async (req, res, next) => {
   }
 });
 
+// `support` is sufficient for verifying (view/verify aren't billing
+// actions); ban stays owner-only below, same split as fraud-flags above.
+platformRouter.post('/orgs/:id/verify', async (req, res, next) => {
+  try {
+    res.json(await platformService.verifyOrg(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // docs/org-onboarding-spec.md §7.2 — everything below is `owner`-only.
 // Re-applying requirePlatformRole here (rather than relying only on the
 // router-level support+owner gate above) is what actually narrows it —
@@ -99,6 +120,14 @@ platformRouter.post('/orgs/:id/reactivate', ownerOnly, async (req, res, next) =>
 platformRouter.post('/orgs/:id/close', ownerOnly, async (req, res, next) => {
   try {
     res.json(await platformService.closeOrg(req.auth!.sub, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformRouter.post('/orgs/:id/ban', ownerOnly, async (req, res, next) => {
+  try {
+    res.json(await platformService.banOrg(req.auth!.sub, req.params.id));
   } catch (err) {
     next(err);
   }

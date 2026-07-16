@@ -73,7 +73,7 @@ export default function SignupPage() {
         body: JSON.stringify({
           org_name: orgName,
           org_type: orgType,
-          cac_registration_number: cacNumber || undefined,
+          cac_registration_number: cacNumber,
           website_url: website || undefined,
           address: address || undefined,
           admin_full_name: adminFullName,
@@ -116,7 +116,7 @@ export default function SignupPage() {
           <legend className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">Organisation</legend>
           <Field label="Organisation name" value={orgName} onChange={setOrgName} required />
           <SelectField label="Organisation type" value={orgType} onChange={setOrgType} options={ORG_TYPES} />
-          <Field label="CAC registration number (optional)" value={cacNumber} onChange={setCacNumber} />
+          <Field label="CAC registration number" value={cacNumber} onChange={setCacNumber} required />
           <Field label="Website or social media link (optional)" value={website} onChange={setWebsite} type="url" />
           <Field label="Physical address / state" value={address} onChange={setAddress} />
         </fieldset>

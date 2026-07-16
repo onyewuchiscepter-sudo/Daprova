@@ -6,7 +6,7 @@ import { ENTERPRISE_THRESHOLD } from './pricingService.js';
 export type SignupInput = {
   org_name: string;
   org_type: string;
-  cac_registration_number?: string;
+  cac_registration_number: string;
   website_url?: string;
   address?: string;
   admin_full_name: string;
@@ -35,6 +35,14 @@ async function uniqueSlug(base: string): Promise<string> {
 // here — expected_student_count is used only for Enterprise routing
 // (§5.5) and the fraud check; real per-cohort tier/free-trial assignment
 // already happens at first-cohort creation (Sprint 4's assignTierForNewCohort).
+//
+// verification_status starts 'pending' for every self-serve signup —
+// deliberately separate from billing_status/fraud flags. An org can create
+// frameworks/courses/cohorts immediately (that's the actual product), but
+// team-management actions (invite/role-change/remove/org-profile-edit) stay
+// gated until a platform admin reviews the registration details and verifies
+// it. Model B (createOrgWithAdmin) skips this entirely — your own team
+// creating an org directly is itself the vetting.
 export async function signUpOrg(authUid: string, adminEmail: string, input: SignupInput) {
   const slug = await uniqueSlug(input.org_name);
   const billingStatus = input.expected_student_count >= ENTERPRISE_THRESHOLD ? 'pending_manual_quote' : 'active';
@@ -46,7 +54,7 @@ export async function signUpOrg(authUid: string, adminEmail: string, input: Sign
       slug,
       contact_email: adminEmail,
       org_type: input.org_type,
-      cac_registration_number: input.cac_registration_number ?? null,
+      cac_registration_number: input.cac_registration_number,
       website_url: input.website_url ?? null,
       address: input.address ?? null,
       primary_use_case: input.primary_use_case,
@@ -55,6 +63,7 @@ export async function signUpOrg(authUid: string, adminEmail: string, input: Sign
       reports_to_funder_name: input.reports_to_funder_name ?? null,
       referral_source: input.referral_source,
       billing_status: billingStatus,
+      verification_status: 'pending',
     })
     .returningAll()
     .executeTakeFirstOrThrow();

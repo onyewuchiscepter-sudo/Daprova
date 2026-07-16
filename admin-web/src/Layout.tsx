@@ -41,6 +41,17 @@ export default function Layout() {
           </button>
         </div>
       )}
+      {/* Self-serve signups start 'pending' until a platform admin reviews
+          the registration — the org can still use the product (frameworks,
+          courses, cohorts) in the meantime, so this is informational, not a
+          blocker. Team-management routes enforce the actual restriction
+          server-side (middleware/orgVerification.ts). */}
+      {org?.verification_status === 'pending' && (
+        <div className="bg-amber-100 text-amber-900 px-6 py-2 text-sm text-center">
+          Your organisation is awaiting verification. You can keep building frameworks and courses, but inviting or managing
+          team members is unavailable until a Daprova admin reviews your registration.
+        </div>
+      )}
       <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="font-semibold text-slate-900">Daprova Admin</span>

@@ -99,8 +99,40 @@ async function renderMain(status) {
   }
   const pendingFlags = flags.filter((f) => !f.reviewed_at);
 
+  let pendingVerification = [];
+  let verificationError = null;
+  try {
+    pendingVerification = await api('/api/v1/platform/orgs/pending-verification');
+  } catch (err) {
+    verificationError = err.message;
+  }
+
   render(`
     <h1>Daprova Platform</h1>
+
+    <h2>Orgs awaiting verification</h2>
+    <p class="muted">Self-serve signups start pending — they can already build frameworks/courses, but team management stays locked until you verify, suspend, or ban the registration here.</p>
+    <div class="card">
+      ${verificationError ? `<p class="error">${verificationError}</p>` : ''}
+      ${status?.verifyError ? `<p class="error">${status.verifyError}</p>` : ''}
+      <table>
+        <thead><tr><th>Organisation</th><th>Type</th><th>CAC number</th><th>Registered</th><th></th></tr></thead>
+        <tbody>
+          ${pendingVerification
+            .map(
+              (o) => `
+            <tr>
+              <td>${o.name}</td>
+              <td>${o.org_type ?? ''}</td>
+              <td>${o.cac_registration_number ?? ''}</td>
+              <td>${new Date(o.created_at).toLocaleDateString()}</td>
+              <td><button class="review-verification-btn" data-id="${o.id}">Review</button></td>
+            </tr>`,
+            )
+            .join('') || '<tr><td colspan="5" class="muted">No organisations awaiting verification.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
 
     <h2>Signup fraud review</h2>
     <p class="muted">docs/org-onboarding-spec.md §7.2 — a match doesn't block signup, it just lands here for review.</p>
@@ -133,7 +165,7 @@ async function renderMain(status) {
     <div class="card">
       ${loadError ? `<p class="error">${loadError}</p>` : ''}
       <table>
-        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Billing status</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Billing status</th><th>Verification</th><th>Created</th><th></th></tr></thead>
         <tbody>
           ${orgs
             .map(
@@ -141,11 +173,12 @@ async function renderMain(status) {
             <tr>
               <td>${o.name}${o.deleted_at ? ' <span class="muted">(closed)</span>' : ''}</td>
               <td>${o.slug}</td><td>${o.contact_email}</td><td>${o.billing_status ?? ''}</td>
+              <td>${o.verification_status ?? ''}</td>
               <td>${new Date(o.created_at).toLocaleDateString()}</td>
               <td><button class="manage-btn" data-id="${o.id}">Manage</button></td>
             </tr>`,
             )
-            .join('') || '<tr><td colspan="6" class="muted">No organisations yet.</td></tr>'}
+            .join('') || '<tr><td colspan="7" class="muted">No organisations yet.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -202,6 +235,10 @@ async function renderMain(status) {
   document.querySelectorAll('.manage-btn').forEach((btn) => {
     btn.addEventListener('click', () => renderOrgDetail(btn.dataset.id));
   });
+
+  document.querySelectorAll('.review-verification-btn').forEach((btn) => {
+    btn.addEventListener('click', () => renderOrgDetail(btn.dataset.id));
+  });
 }
 
 // docs/org-onboarding-spec.md §7.2 — org regulation actions. `support` can
@@ -220,6 +257,9 @@ async function renderOrgDetail(orgId, status) {
   }
 
   const isSuspended = org.billing_status === 'suspended';
+  const isPendingVerification = org.verification_status === 'pending';
+  const isBanned = org.verification_status === 'banned';
+  const admin = org.members.find((m) => m.role === 'admin') ?? org.members[0];
 
   render(`
     <h1>Daprova Platform</h1>
@@ -228,18 +268,42 @@ async function renderOrgDetail(orgId, status) {
     <div class="card">
       <p><strong>Slug:</strong> ${org.slug} &nbsp; <strong>Billing status:</strong> ${org.billing_status} &nbsp;
          <strong>Free trial used:</strong> ${org.has_used_free_trial ? 'yes' : 'no'} &nbsp;
-         <strong>Signup review:</strong> ${org.signup_review_status ?? 'none'}</p>
+         <strong>Signup review:</strong> ${org.signup_review_status ?? 'none'} &nbsp;
+         <strong>Verification status:</strong> ${org.verification_status}</p>
       ${status?.error ? `<p class="error">${status.error}</p>` : ''}
       ${status?.success ? `<p class="muted">${status.success}</p>` : ''}
       <div class="actions">
+        ${isPendingVerification ? '<button id="verify-btn">Verify</button>' : ''}
         ${
           isSuspended
             ? '<button id="reactivate-btn">Reactivate org</button>'
             : '<button id="suspend-btn">Suspend org</button>'
         }
+        ${!isBanned ? '<button id="ban-btn">Ban</button>' : ''}
         <button id="extend-trial-btn">Grant free-trial exception</button>
         <button id="close-org-btn">Close org</button>
       </div>
+    </div>
+
+    <h3>Registration details</h3>
+    <p class="muted">Captured at signup — everything except password. Review this before verifying, suspending, or banning.</p>
+    <div class="card">
+      <table>
+        <tbody>
+          <tr><td><strong>Organisation type</strong></td><td>${org.org_type ?? ''}</td></tr>
+          <tr><td><strong>CAC registration number</strong></td><td>${org.cac_registration_number ?? ''}</td></tr>
+          <tr><td><strong>Website / social link</strong></td><td>${org.website_url ?? ''}</td></tr>
+          <tr><td><strong>Address</strong></td><td>${org.address ?? ''}</td></tr>
+          <tr><td><strong>Primary use case</strong></td><td>${org.primary_use_case ?? ''}</td></tr>
+          <tr><td><strong>Expected cadence</strong></td><td>${org.expected_cadence ?? ''}</td></tr>
+          <tr><td><strong>Reports to funder</strong></td><td>${org.reports_to_funder ? `yes (${org.reports_to_funder_name ?? 'unnamed'})` : 'no'}</td></tr>
+          <tr><td><strong>Referral source</strong></td><td>${org.referral_source ?? ''}</td></tr>
+          <tr><td><strong>Admin name</strong></td><td>${admin?.display_name ?? ''}</td></tr>
+          <tr><td><strong>Admin title</strong></td><td>${admin?.title ?? ''}</td></tr>
+          <tr><td><strong>Admin phone</strong></td><td>${admin?.phone ?? ''}</td></tr>
+          <tr><td><strong>Admin email</strong></td><td>${admin?.email ?? ''}</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <h3>Members</h3>
@@ -301,6 +365,11 @@ async function renderOrgDetail(orgId, status) {
     }
   };
 
+  document.getElementById('verify-btn')?.addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/verify`, { method: 'POST' })));
+  document.getElementById('ban-btn')?.addEventListener('click', () => {
+    if (!confirm(`Ban ${org.name}? This is permanent — the org will be closed and can no longer log in.`)) return;
+    act(() => api(`/api/v1/platform/orgs/${orgId}/ban`, { method: 'POST' }));
+  });
   document.getElementById('suspend-btn')?.addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/suspend`, { method: 'POST' })));
   document.getElementById('reactivate-btn')?.addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/reactivate`, { method: 'POST' })));
   document.getElementById('close-org-btn').addEventListener('click', () => act(() => api(`/api/v1/platform/orgs/${orgId}/close`, { method: 'POST' })));

@@ -13,6 +13,7 @@ export interface OrganisationsTable {
   has_used_free_trial: Generated<boolean>;
   billing_status: Generated<string>; // active | locked_pending_upgrade | pending_manual_quote | suspended
   signup_review_status: string | null; // null | flagged
+  verification_status: Generated<string>; // pending | verified | banned — separate axis from billing_status
   org_type: string | null;
   cac_registration_number: string | null;
   website_url: string | null;

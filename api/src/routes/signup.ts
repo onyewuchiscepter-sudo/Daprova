@@ -15,7 +15,7 @@ const REFERRAL_SOURCES = ['referral', 'social_media', 'event', 'existing_client'
 const signupSchema = z.object({
   org_name: z.string().min(1),
   org_type: z.enum(ORG_TYPES),
-  cac_registration_number: z.string().optional(),
+  cac_registration_number: z.string().min(1),
   website_url: z.string().url().optional(),
   address: z.string().optional(),
   admin_full_name: z.string().min(1),
@@ -56,7 +56,13 @@ signupRouter.post('/', async (req, res, next) => {
     res.status(201).json({
       session_token: sessionToken,
       user: { id: membership.person_id, email: decoded.email, display_name: body.admin_full_name, role: 'admin', org_id: org.id },
-      org: { id: org.id, name: org.name, billing_status: org.billing_status, signup_review_status: org.signup_review_status },
+      org: {
+        id: org.id,
+        name: org.name,
+        billing_status: org.billing_status,
+        signup_review_status: org.signup_review_status,
+        verification_status: org.verification_status,
+      },
     });
   } catch (err) {
     next(err);

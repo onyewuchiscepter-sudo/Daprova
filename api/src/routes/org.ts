@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { requireVerified } from '../middleware/orgVerification.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import * as orgTeamService from '../services/orgTeamService.js';
 
@@ -44,7 +45,14 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     if (!org) throw notFound('Organisation not found');
-    res.json({ id: org.id, name: org.name, slug: org.slug, logo_url: org.logo_url, contact_email: org.contact_email });
+    res.json({
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      logo_url: org.logo_url,
+      contact_email: org.contact_email,
+      verification_status: org.verification_status,
+    });
   } catch (err) {
     next(err);
   }
@@ -76,7 +84,7 @@ const updateOrgSchema = z.object({
   logo_url: z.string().url().optional(),
   contact_email: z.string().email().optional(),
 });
-orgRouter.patch('/org', requireAuth, requireRole('admin'), async (req, res, next) => {
+orgRouter.patch('/org', requireAuth, requireRole('admin'), requireVerified, async (req, res, next) => {
   try {
     const body = updateOrgSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
@@ -102,7 +110,7 @@ orgRouter.get('/org/users', requireAuth, requireRole('admin'), async (req, res, 
 });
 
 const inviteSchema = z.object({ email: z.string().email(), role: z.enum(['admin', 'viewer']) });
-orgRouter.post('/org/users/invite', requireAuth, requireRole('admin'), async (req, res, next) => {
+orgRouter.post('/org/users/invite', requireAuth, requireRole('admin'), requireVerified, async (req, res, next) => {
   try {
     const body = inviteSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
@@ -127,7 +135,7 @@ orgRouter.post('/org/users/invite', requireAuth, requireRole('admin'), async (re
 });
 
 const roleSchema = z.object({ role: z.enum(['admin', 'viewer']) });
-orgRouter.patch('/org/users/:id/role', requireAuth, requireRole('admin'), async (req, res, next) => {
+orgRouter.patch('/org/users/:id/role', requireAuth, requireRole('admin'), requireVerified, async (req, res, next) => {
   try {
     const body = roleSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
@@ -138,7 +146,7 @@ orgRouter.patch('/org/users/:id/role', requireAuth, requireRole('admin'), async 
   }
 });
 
-orgRouter.delete('/org/users/:id', requireAuth, requireRole('admin'), async (req, res, next) => {
+orgRouter.delete('/org/users/:id', requireAuth, requireRole('admin'), requireVerified, async (req, res, next) => {
   try {
     await orgTeamService.removeMember(req.auth!.org_id!, req.params.id, req.auth!.sub);
     res.status(204).send();

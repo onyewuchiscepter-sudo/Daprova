@@ -8,7 +8,7 @@ import { getTier } from './pricingService.js';
 export async function listOrgs() {
   return db
     .selectFrom('organisations')
-    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'created_at', 'deleted_at'])
+    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'verification_status', 'created_at', 'deleted_at'])
     .orderBy('created_at', 'desc')
     .execute();
 }
@@ -24,7 +24,7 @@ export async function getOrgDetail(orgId: string) {
   const members = await db
     .selectFrom('org_memberships')
     .innerJoin('people', 'people.id', 'org_memberships.person_id')
-    .select(['people.id', 'people.email', 'people.display_name', 'org_memberships.role', 'org_memberships.created_at'])
+    .select(['people.id', 'people.email', 'people.display_name', 'people.title', 'people.phone', 'org_memberships.role', 'org_memberships.created_at'])
     .where('org_memberships.org_id', '=', orgId)
     .where('org_memberships.deleted_at', 'is', null)
     .execute();
@@ -75,7 +75,11 @@ export async function createOrgWithAdmin(
 
   const org = await db
     .insertInto('organisations')
-    .values({ name: opts.org_name, slug: opts.org_slug, contact_email: opts.contact_email })
+    // verification_status defaults to 'verified' at the column level, but
+    // set explicitly here too — Model B org creation *is* the vetting
+    // (a platform admin is doing this directly), so it should never be
+    // ambiguous or accidentally affected if that default ever changes.
+    .values({ name: opts.org_name, slug: opts.org_slug, contact_email: opts.contact_email, verification_status: 'verified' })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -162,6 +166,58 @@ async function assertOrgExists(orgId: string) {
   const org = await db.selectFrom('organisations').selectAll().where('id', '=', orgId).executeTakeFirst();
   if (!org) throw notFound('Organisation not found');
   return org;
+}
+
+// docs/org-onboarding-spec.md — the verification queue for self-serve
+// (Model A) signups. Separate axis from the fraud-flags queue above and
+// from billing_status entirely: every 'pending' org shows up here whether
+// or not it also happens to be fraud-flagged, and clicking into one on the
+// platform dashboard shows the full registration-detail block (org type,
+// CAC number, website, address, use case, cadence, funder-reporting info,
+// referral source, admin contact) captured at signup time.
+export async function listPendingVerificationOrgs() {
+  return db
+    .selectFrom('organisations')
+    .selectAll()
+    .where('verification_status', '=', 'pending')
+    .where('deleted_at', 'is', null)
+    .orderBy('created_at', 'asc')
+    .execute();
+}
+
+// `support` role is sufficient (router-level gate), same reasoning as
+// reviewFraudFlag above — verifying a registration doesn't touch billing
+// or suspend/ban anything, so it doesn't need the stricter owner-only bar.
+export async function verifyOrg(actorPersonId: string, orgId: string) {
+  const org = await assertOrgExists(orgId);
+  if (org.verification_status !== 'pending') throw badRequest('Organisation is not awaiting verification');
+  const updated = await db
+    .updateTable('organisations')
+    .set({ verification_status: 'verified' })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_verified', details: null });
+  return updated;
+}
+
+// "Ban" (§ user's verification-flow request) is deliberately more severe
+// and more permanent than suspend: it sets verification_status='banned'
+// (distinct from 'pending'/'verified', so it can never silently pass the
+// requireVerified gate again) *and* soft-deletes the org via the same
+// deleted_at pattern closeOrg uses, since a banned registration shouldn't
+// be recoverable by just flipping a status back like a suspension is.
+// Owner-only, matching the existing suspend/close precedent.
+export async function banOrg(actorPersonId: string, orgId: string) {
+  await assertOrgExists(orgId);
+  const updated = await db
+    .updateTable('organisations')
+    .set({ verification_status: 'banned', deleted_at: sql`now()` })
+    .where('id', '=', orgId)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_banned', details: null });
+  return updated;
 }
 
 // docs/org-onboarding-spec.md §7.2 — owner-only org-regulation actions.

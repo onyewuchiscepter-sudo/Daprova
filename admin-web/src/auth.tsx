@@ -5,7 +5,7 @@ import { auth } from './firebase';
 import { apiFetch, setSessionToken } from './api';
 
 type User = { id: string; email: string; display_name: string | null; role: 'admin' | 'viewer'; org_id: string };
-type Org = { id: string; name: string; slug: string; contact_email: string };
+type Org = { id: string; name: string; slug: string; contact_email: string; verification_status: 'pending' | 'verified' | 'banned' };
 type Membership = { id: string; name: string; role: 'admin' | 'viewer' };
 type PendingOrgSelection = { org_selection_token: string; orgs: Membership[] };
 // docs/org-onboarding-spec.md §7.3 — display-only; actual enforcement of
