@@ -1,6 +1,6 @@
 import type { Paragraph, Table } from 'docx';
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { formatPct, formatSigned, keyValueGrid, numberedList, paragraph, reportHeader, sectionTitle, table } from '../primitives.js';
+import { formatPct, formatSigned, keyValueGrid, numberedList, paragraph, reportHeader, satisfactionSection, sectionTitle, table } from '../primitives.js';
 
 export function renderMasterCardFoundation(data: ReportDataContract): (Paragraph | Table)[] {
   const achievements: string[] = [];
@@ -54,6 +54,8 @@ export function renderMasterCardFoundation(data: ReportDataContract): (Paragraph
     sectionTitle('Equity Breakdown'),
     table(['Location', 'n', 'Mean gain', 'Pass rate'], data.equity.by_location.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)])),
     table(['Age group', 'n', 'Mean gain', 'Pass rate'], data.equity.by_age_group.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)])),
+
+    ...satisfactionSection('Learner Feedback', data.satisfaction),
 
     sectionTitle('Key Achievements'),
     ...numberedList(achievements.length > 0 ? achievements : ['No completed pre/post pairs yet for this cohort.']),

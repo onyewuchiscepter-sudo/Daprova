@@ -225,6 +225,53 @@ export async function getEquityBreakdown(cohortId: string, dimension: EquityDime
   };
 }
 
+// Module 5 (S11) — learner satisfaction survey, cohort-level aggregate for
+// the dashboard's Satisfaction tab. NPS follows the standard definition
+// (0-10 rating; 9-10 promoters, 7-8 passives, 0-6 detractors; score =
+// %promoters - %detractors, range -100..100), computed here rather than
+// stored per-response since it's only meaningful as an aggregate.
+export async function getSatisfactionSummary(cohortId: string) {
+  const row = await db
+    .selectFrom('satisfaction_responses as sr')
+    .select(({ fn }) => [
+      sql<string>`round(avg(sr.instructor_rating)::numeric, 2)`.as('avg_instructor_rating'),
+      sql<string>`round(avg(sr.content_relevance)::numeric, 2)`.as('avg_content_relevance'),
+      sql<string>`round(avg(sr.delivery_satisfaction)::numeric, 2)`.as('avg_delivery_satisfaction'),
+      fn.countAll().as('response_count'),
+      sql<string>`count(*) filter (where sr.nps_score >= 9)`.as('promoters'),
+      sql<string>`count(*) filter (where sr.nps_score between 7 and 8)`.as('passives'),
+      sql<string>`count(*) filter (where sr.nps_score <= 6)`.as('detractors'),
+      sql<string>`count(*) filter (where sr.nps_score is not null)`.as('nps_responses'),
+    ])
+    .where('sr.cohort_id', '=', cohortId)
+    .executeTakeFirst();
+
+  const comments = await db
+    .selectFrom('satisfaction_responses as sr')
+    .select(['sr.open_positive', 'sr.open_improve', 'sr.created_at'])
+    .where('sr.cohort_id', '=', cohortId)
+    .where((eb) => eb.or([eb('sr.open_positive', 'is not', null), eb('sr.open_improve', 'is not', null)]))
+    .orderBy('sr.created_at', 'desc')
+    .execute();
+
+  const npsResponses = Number(row?.nps_responses ?? 0);
+  const npsScore =
+    npsResponses > 0 ? Math.round(((Number(row?.promoters ?? 0) - Number(row?.detractors ?? 0)) / npsResponses) * 100) : null;
+
+  return {
+    response_count: Number(row?.response_count ?? 0),
+    avg_instructor_rating: row?.avg_instructor_rating !== null && row?.avg_instructor_rating !== undefined ? Number(row.avg_instructor_rating) : null,
+    avg_content_relevance: row?.avg_content_relevance !== null && row?.avg_content_relevance !== undefined ? Number(row.avg_content_relevance) : null,
+    avg_delivery_satisfaction:
+      row?.avg_delivery_satisfaction !== null && row?.avg_delivery_satisfaction !== undefined ? Number(row.avg_delivery_satisfaction) : null,
+    nps_score: npsScore,
+    nps_promoters: Number(row?.promoters ?? 0),
+    nps_passives: Number(row?.passives ?? 0),
+    nps_detractors: Number(row?.detractors ?? 0),
+    comments: comments.map((c) => ({ positive: c.open_positive, improve: c.open_improve, created_at: c.created_at })),
+  };
+}
+
 // Cohort-wide (not per-subgroup) mean confidence rating pre/post. Used by the
 // Tony Elumelu Foundation report template as its "business readiness score"
 // proxy (spec: "confidence index used as business readiness proxy").

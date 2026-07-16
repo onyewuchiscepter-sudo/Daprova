@@ -1,6 +1,6 @@
 import type { Paragraph, Table } from 'docx';
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { formatPct, formatSigned, keyValueGrid, paragraph, reportHeader, sectionTitle, table } from '../primitives.js';
+import { formatPct, formatSigned, keyValueGrid, paragraph, reportHeader, satisfactionSection, sectionTitle, table } from '../primitives.js';
 
 export function renderGenericDonor(data: ReportDataContract): (Paragraph | Table)[] {
   const children: (Paragraph | Table)[] = [
@@ -41,6 +41,8 @@ export function renderGenericDonor(data: ReportDataContract): (Paragraph | Table
     sectionTitle('Equity Outcomes'),
     table(['Gender', 'n', 'Mean gain', 'Pass rate'], data.equity.by_gender.map((g) => [g.label.replace(/_/g, ' '), String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)])),
     table(['Location', 'n', 'Mean gain', 'Pass rate'], data.equity.by_location.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)])),
+
+    ...satisfactionSection('Learner Satisfaction', data.satisfaction),
 
     sectionTitle('Recommendations'),
     paragraph(data.narrative.next_steps),

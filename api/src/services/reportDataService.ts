@@ -34,7 +34,19 @@ export type ReportDataContract = {
     by_location: Array<{ label: string; n: number; mean_gain: number | null; pass_rate: number | null }>;
     by_age_group: Array<{ label: string; n: number; mean_gain: number | null; pass_rate: number | null }>;
   };
-  satisfaction: null; // Module 5 (learner satisfaction survey) isn't built yet.
+  // Module 5 (S11) — null means no survey responses at all yet, so every
+  // template can just skip the section rather than rendering an empty one.
+  satisfaction: {
+    response_count: number;
+    avg_instructor_rating: number | null;
+    avg_content_relevance: number | null;
+    avg_delivery_satisfaction: number | null;
+    nps_score: number | null;
+    nps_promoters: number;
+    nps_passives: number;
+    nps_detractors: number;
+    top_comments: string[];
+  } | null;
   tracer: null; // Module 6 (tracer study) isn't built yet.
   narrative: NarrativeFields;
 };
@@ -80,7 +92,7 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
   ]);
 
   const passThreshold = Number(cohort.pass_threshold);
-  const [gains, effectSize, competencyBreakdown, passRate, byGender, byLocation, byAgeGroup, confidence] = await Promise.all([
+  const [gains, effectSize, competencyBreakdown, passRate, byGender, byLocation, byAgeGroup, confidence, satisfaction] = await Promise.all([
     analyticsService.getMeanGain(cohortId),
     analyticsService.getCohensD(cohortId),
     analyticsService.getCompetencyBreakdown(cohortId, cohort.framework_id),
@@ -89,7 +101,16 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
     equitySide(cohortId, 'location_type'),
     equitySide(cohortId, 'age_group'),
     analyticsService.getMeanConfidence(cohortId),
+    analyticsService.getSatisfactionSummary(cohortId),
   ]);
+
+  // A handful of representative quotes rather than every comment — reports
+  // are meant to be skimmable, not a full transcript dump. Positive quotes
+  // lead (funder reports read better opening with what's working), capped at
+  // 5 combined so this section can't balloon with a large cohort.
+  const topComments = satisfaction.comments
+    .flatMap((c) => [c.positive, c.improve].filter((t): t is string => !!t))
+    .slice(0, 5);
 
   return {
     org: { name: cohort.org_name, logo_url: cohort.logo_url },
@@ -118,7 +139,20 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
       })),
     },
     equity: { by_gender: byGender, by_location: byLocation, by_age_group: byAgeGroup },
-    satisfaction: null,
+    satisfaction:
+      satisfaction.response_count === 0
+        ? null
+        : {
+            response_count: satisfaction.response_count,
+            avg_instructor_rating: satisfaction.avg_instructor_rating,
+            avg_content_relevance: satisfaction.avg_content_relevance,
+            avg_delivery_satisfaction: satisfaction.avg_delivery_satisfaction,
+            nps_score: satisfaction.nps_score,
+            nps_promoters: satisfaction.nps_promoters,
+            nps_passives: satisfaction.nps_passives,
+            nps_detractors: satisfaction.nps_detractors,
+            top_comments: topComments,
+          },
     tracer: null,
     narrative,
   };

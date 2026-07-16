@@ -1,6 +1,6 @@
 
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { drawKeyValueGrid, drawParagraph, drawReportHeader, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
+import { drawKeyValueGrid, drawParagraph, drawReportHeader, drawSatisfactionSection, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
 
 // Required sections per spec: Executive summary, programme data, learning
 // outcomes, equity outcomes, recommendations. Flexible format for any funder
@@ -45,6 +45,8 @@ export function renderGenericDonor(doc: PDFKit.PDFDocument, data: ReportDataCont
   drawSectionTitle(doc, 'Equity Outcomes');
   drawTable(doc, ['Gender', 'n', 'Mean gain', 'Pass rate'], data.equity.by_gender.map((g) => [g.label.replace(/_/g, ' '), String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
   drawTable(doc, ['Location', 'n', 'Mean gain', 'Pass rate'], data.equity.by_location.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
+
+  drawSatisfactionSection(doc, 'Learner Satisfaction', data.satisfaction);
 
   drawSectionTitle(doc, 'Recommendations');
   drawParagraph(doc, data.narrative.next_steps);

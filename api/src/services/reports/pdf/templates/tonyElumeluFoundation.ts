@@ -1,6 +1,6 @@
 
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { drawKeyValueGrid, drawParagraph, drawReportHeader, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
+import { drawKeyValueGrid, drawParagraph, drawReportHeader, drawSatisfactionSection, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
 
 // Required sections per spec: Entrepreneur profile, training overview,
 // skills acquired (competency scores), business readiness score, next
@@ -52,6 +52,8 @@ export function renderTonyElumeluFoundation(doc: PDFKit.PDFDocument, data: Repor
         : '—',
     ],
   ]);
+
+  drawSatisfactionSection(doc, 'Programme Satisfaction', data.satisfaction);
 
   drawSectionTitle(doc, 'Next Steps');
   drawParagraph(doc, data.narrative.next_steps);

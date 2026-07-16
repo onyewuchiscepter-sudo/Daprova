@@ -68,6 +68,29 @@ select, input[type="text"] {
   cursor: pointer;
 }
 .rating-row button.selected { border-color: #0f172a; background: #0f172a; color: #fff; }
+.nps-row { flex-wrap: wrap; }
+.nps-row button { flex: 1 1 14%; padding: 10px 0; font-size: 0.85rem; }
+textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.btn-link {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 4px;
+}
 .offline-banner {
   background: #fef3c7;
   color: #92400e;

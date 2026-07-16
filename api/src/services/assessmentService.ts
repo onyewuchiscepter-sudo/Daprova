@@ -262,3 +262,52 @@ export async function getResult(cohortToken: string, learnerToken: string) {
 
   return scoreSummaryFor(learner.id, cohort.framework_id, latest.session_type as 'pre' | 'post');
 }
+
+type SatisfactionInput = {
+  instructor_rating: number;
+  content_relevance: number;
+  delivery_satisfaction: number;
+  nps_score: number;
+  open_positive?: string;
+  open_improve?: string;
+};
+
+// Module 5 (S11) — appended to the post-assessment flow only (spec: a
+// satisfaction survey about the program makes no sense before a learner has
+// experienced it). Upserted rather than insert-only since assessment-web
+// re-renders this screen on every post-link revisit until the learner has
+// answered it, and a resubmission (e.g. after a network retry) should
+// overwrite rather than duplicate.
+export async function submitSatisfaction(cohortToken: string, learnerToken: string, input: SatisfactionInput) {
+  const { cohort, learner, session } = await resolveLearnerSession(cohortToken, learnerToken);
+  if (session.session_type !== 'post') {
+    throw badRequest('The satisfaction survey is only available on the post-assessment link');
+  }
+  if (session.status === 'started') {
+    throw badRequest('Complete the post-assessment before submitting the satisfaction survey');
+  }
+
+  const existing = await db
+    .selectFrom('satisfaction_responses')
+    .select('id')
+    .where('learner_id', '=', learner.id)
+    .where('cohort_id', '=', cohort.id)
+    .executeTakeFirst();
+
+  const values = {
+    instructor_rating: input.instructor_rating,
+    content_relevance: input.content_relevance,
+    delivery_satisfaction: input.delivery_satisfaction,
+    nps_score: input.nps_score,
+    open_positive: input.open_positive ?? null,
+    open_improve: input.open_improve ?? null,
+  };
+
+  if (existing) {
+    await db.updateTable('satisfaction_responses').set(values).where('id', '=', existing.id).execute();
+  } else {
+    await db.insertInto('satisfaction_responses').values({ learner_id: learner.id, cohort_id: cohort.id, ...values }).execute();
+  }
+
+  return { ok: true };
+}

@@ -113,4 +113,34 @@ export function drawTable(doc: PDFKit.PDFDocument, headers: string[], rows: stri
   doc.moveDown(0.8);
 }
 
+// Module 5 (S11) — shared across all 4 templates rather than duplicated,
+// since every funder gets the same 4 numbers + top quotes; only the section
+// title varies by template to match that funder's terminology. No-ops when
+// null (no survey responses yet) so callers can call this unconditionally.
+export function drawSatisfactionSection(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  satisfaction: {
+    response_count: number;
+    avg_instructor_rating: number | null;
+    avg_content_relevance: number | null;
+    avg_delivery_satisfaction: number | null;
+    nps_score: number | null;
+    top_comments: string[];
+  } | null,
+) {
+  if (!satisfaction) return;
+  drawSectionTitle(doc, title);
+  drawKeyValueGrid(doc, [
+    ['Instructor rating', satisfaction.avg_instructor_rating !== null ? `${satisfaction.avg_instructor_rating} / 5` : '—'],
+    ['Content relevance', satisfaction.avg_content_relevance !== null ? `${satisfaction.avg_content_relevance} / 5` : '—'],
+    ['Delivery satisfaction', satisfaction.avg_delivery_satisfaction !== null ? `${satisfaction.avg_delivery_satisfaction} / 5` : '—'],
+    ['Net Promoter Score', satisfaction.nps_score !== null ? String(satisfaction.nps_score) : '—'],
+  ]);
+  drawParagraph(doc, `Based on ${satisfaction.response_count} learner response${satisfaction.response_count === 1 ? '' : 's'}.`);
+  if (satisfaction.top_comments.length > 0) {
+    drawNumberedList(doc, satisfaction.top_comments.map((c) => `"${c}"`));
+  }
+}
+
 export { formatPct, formatSigned } from '../format.js';

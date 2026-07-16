@@ -98,3 +98,24 @@ assessRouter.get('/:cohortToken/result/:learnerToken', async (req, res, next) =>
     next(err);
   }
 });
+
+// Module 5 (S11) — 6 questions per the PRD: 3 star-style ratings (1-5), an
+// NPS score (0-10), and two optional open-text fields capped at 300 chars.
+const satisfactionSchema = z.object({
+  learner_token: z.string().uuid(),
+  instructor_rating: z.number().int().min(1).max(5),
+  content_relevance: z.number().int().min(1).max(5),
+  delivery_satisfaction: z.number().int().min(1).max(5),
+  nps_score: z.number().int().min(0).max(10),
+  open_positive: z.string().max(300).optional(),
+  open_improve: z.string().max(300).optional(),
+});
+assessRouter.post('/:cohortToken/satisfaction', async (req, res, next) => {
+  try {
+    const body = parse(satisfactionSchema, req.body);
+    const { learner_token, ...rest } = body;
+    res.json(await assessmentService.submitSatisfaction(req.params.cohortToken, learner_token, rest));
+  } catch (err) {
+    next(err);
+  }
+});

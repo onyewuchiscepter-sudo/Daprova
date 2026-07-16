@@ -130,6 +130,16 @@ cohortsRouter.get('/:id/equity', async (req, res, next) => {
   }
 });
 
+// Module 5 (S11) — cohort-level satisfaction survey aggregate for the dashboard.
+cohortsRouter.get('/:id/satisfaction', async (req, res, next) => {
+  try {
+    const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
+    res.json(await analyticsService.getSatisfactionSummary(cohort.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 const generateReportSchema = z.object({
   template: z.string().refine(isFunderTemplateKey, 'Unknown funder template'),
   narrative: z.object({

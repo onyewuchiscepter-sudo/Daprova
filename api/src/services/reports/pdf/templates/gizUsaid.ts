@@ -1,6 +1,6 @@
 
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { drawNumberedList, drawParagraph, drawReportHeader, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
+import { drawNumberedList, drawParagraph, drawReportHeader, drawSatisfactionSection, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
 
 // Required sections per spec: Project summary, output indicators, outcome
 // indicators (learning gains), disaggregated results, lessons learned.
@@ -40,6 +40,8 @@ export function renderGizUsaid(doc: PDFKit.PDFDocument, data: ReportDataContract
   drawTable(doc, ['Gender', 'n', 'Mean gain', 'Pass rate'], data.equity.by_gender.map((g) => [g.label.replace(/_/g, ' '), String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
   drawTable(doc, ['Location', 'n', 'Mean gain', 'Pass rate'], data.equity.by_location.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
   drawTable(doc, ['Age group', 'n', 'Mean gain', 'Pass rate'], data.equity.by_age_group.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
+
+  drawSatisfactionSection(doc, 'Learner Satisfaction (Cross-Cutting Indicator)', data.satisfaction);
 
   drawSectionTitle(doc, 'Lessons Learned');
   drawParagraph(doc, data.narrative.challenges);

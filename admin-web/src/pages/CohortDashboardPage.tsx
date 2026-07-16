@@ -47,6 +47,17 @@ type EquityGroup = {
   small_sample: boolean;
 };
 type EquityBreakdown = { dimension: string; groups: EquityGroup[] };
+type SatisfactionSummary = {
+  response_count: number;
+  avg_instructor_rating: number | null;
+  avg_content_relevance: number | null;
+  avg_delivery_satisfaction: number | null;
+  nps_score: number | null;
+  nps_promoters: number;
+  nps_passives: number;
+  nps_detractors: number;
+  comments: Array<{ positive: string | null; improve: string | null; created_at: string }>;
+};
 type ReportTemplate = { key: string; label: string };
 type NarrativeFields = { background: string; challenges: string; next_steps: string };
 type ReportRecord = { id: string; funder_template: string; narrative_json: NarrativeFields; status: string; generated_at: string };
@@ -86,7 +97,7 @@ const DIMENSION_LABEL: Record<string, string> = { gender: 'Gender', age_group: '
 export default function CohortDashboardPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'overview' | 'equity' | 'reports'>('overview');
+  const [tab, setTab] = useState<'overview' | 'equity' | 'satisfaction' | 'reports'>('overview');
 
   // FR-M3-05: filter state lives in URL params so it survives a refresh.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -134,6 +145,14 @@ export default function CohortDashboardPage() {
     queryFn: () => apiFetch(`/api/v1/cohorts/${id}/equity`),
     refetchInterval: 5000,
     enabled: tab === 'equity',
+  });
+
+  // Module 5 (S11): learner satisfaction survey aggregate — no polling since
+  // it only changes when a learner submits feedback, not every 5s.
+  const { data: satisfaction } = useQuery<SatisfactionSummary>({
+    queryKey: ['cohort-satisfaction', id],
+    queryFn: () => apiFetch(`/api/v1/cohorts/${id}/satisfaction`),
+    enabled: tab === 'satisfaction',
   });
 
   // Module 4: funder report generation. Templates rarely change, so no
@@ -283,7 +302,7 @@ export default function CohortDashboardPage() {
 
       {/* FR-M3-04: equity view lives as a tab within this same dashboard. */}
       <div className="flex gap-4 border-b mb-6">
-        {(['overview', 'equity', 'reports'] as const).map((t) => (
+        {(['overview', 'equity', 'satisfaction', 'reports'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -297,7 +316,7 @@ export default function CohortDashboardPage() {
       {/* US-13: compound demographic filters — applying any of them updates
           the Overview tab's stats, competency breakdown, and learner table
           together via the same query. Not applicable to the Reports tab. */}
-      {tab !== 'reports' && (
+      {tab !== 'reports' && tab !== 'satisfaction' && (
         <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-end gap-3">
           {FILTER_DIMENSIONS.map((dim) => (
             <label key={dim} className="text-xs text-slate-500">
@@ -448,6 +467,74 @@ export default function CohortDashboardPage() {
               </table>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'satisfaction' && (
+        <div className="space-y-6">
+          {satisfaction && satisfaction.response_count === 0 && (
+            <div className="bg-white rounded-lg shadow p-5 text-sm text-slate-500">
+              No satisfaction survey responses yet — these are collected on the post-assessment link after a learner submits.
+            </div>
+          )}
+          {satisfaction && satisfaction.response_count > 0 && (
+            <>
+              <div className="grid grid-cols-4 gap-4">
+                <Stat label="Responses" value={satisfaction.response_count} />
+                <Stat label="Instructor rating" value={satisfaction.avg_instructor_rating !== null ? `${satisfaction.avg_instructor_rating} / 5` : '—'} />
+                <Stat label="Content relevance" value={satisfaction.avg_content_relevance !== null ? `${satisfaction.avg_content_relevance} / 5` : '—'} />
+                <Stat label="Delivery satisfaction" value={satisfaction.avg_delivery_satisfaction !== null ? `${satisfaction.avg_delivery_satisfaction} / 5` : '—'} />
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-5">
+                <h3 className="font-medium text-slate-900 mb-3">Net Promoter Score</h3>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-2xl font-semibold text-slate-900">{satisfaction.nps_score !== null ? satisfaction.nps_score : '—'}</p>
+                    <p className="text-xs text-slate-500">−100 to +100</p>
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-500">Promoters (9–10)</p>
+                      <p className="font-medium text-emerald-700">{satisfaction.nps_promoters}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Passives (7–8)</p>
+                      <p className="font-medium text-slate-700">{satisfaction.nps_passives}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Detractors (0–6)</p>
+                      <p className="font-medium text-red-700">{satisfaction.nps_detractors}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-5">
+                <h3 className="font-medium text-slate-900 mb-3">Learner comments</h3>
+                <div className="space-y-3">
+                  {satisfaction.comments.map((c, i) => (
+                    <div key={i} className="text-sm border-b last:border-b-0 pb-3 last:pb-0">
+                      {c.positive && (
+                        <p className="text-slate-700">
+                          <span className="text-emerald-700 font-medium">Liked: </span>
+                          {c.positive}
+                        </p>
+                      )}
+                      {c.improve && (
+                        <p className="text-slate-700 mt-1">
+                          <span className="text-amber-700 font-medium">Could improve: </span>
+                          {c.improve}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">{new Date(c.created_at).toLocaleDateString()}</p>
+                    </div>
+                  ))}
+                  {satisfaction.comments.length === 0 && <p className="text-sm text-slate-500">No written comments yet.</p>}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

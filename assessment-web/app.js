@@ -310,11 +310,97 @@
         method: 'POST',
         body: JSON.stringify({ learner_token: state.learnerToken, confidence: confidence }),
       });
-    }).then(showScoreSummary).catch(function (err) { showError(err.message); });
+    }).then(afterAssessmentComplete).catch(function (err) { showError(err.message); });
   }
 
   function showResultScreen() {
-    api('/' + COHORT_TOKEN + '/result/' + state.learnerToken).then(showScoreSummary).catch(function (err) { showError(err.message); });
+    api('/' + COHORT_TOKEN + '/result/' + state.learnerToken).then(afterAssessmentComplete).catch(function (err) { showError(err.message); });
+  }
+
+  // Module 5 (S11) — the satisfaction survey only makes sense once a learner
+  // has actually experienced the program, so it's appended after the
+  // post-assessment (never the pre-assessment) rather than being its own
+  // separate link. "Done" is tracked per learner in localStorage (submit or
+  // skip both count) purely to avoid re-prompting on every revisit to the
+  // post link — the server itself doesn't need to know "skipped" vs
+  // "answered", it only ever sees a submission or nothing.
+  function satisfactionKey() { return 'daprova_satisfaction_' + state.learnerToken; }
+  function satisfactionDone() { return localStorage.getItem(satisfactionKey()) === '1'; }
+  function markSatisfactionDone() { localStorage.setItem(satisfactionKey(), '1'); }
+
+  function afterAssessmentComplete(summary) {
+    if (summary.session_type === 'post' && !satisfactionDone()) {
+      showSatisfactionSurvey(summary);
+    } else {
+      showScoreSummary(summary);
+    }
+  }
+
+  var SURVEY_RATING_FIELDS = ['instructor_rating', 'content_relevance', 'delivery_satisfaction', 'nps_score'];
+
+  function ratingField(name, label, max) {
+    var buttons = [];
+    for (var i = (max === 10 ? 0 : 1); i <= max; i++) {
+      buttons.push('<button data-field="' + name + '" data-rating="' + i + '">' + i + '</button>');
+    }
+    return '<div class="field"><label>' + label + '</label><div class="rating-row' + (max === 10 ? ' nps-row' : '') + '">' + buttons.join('') + '</div></div>';
+  }
+  function textareaField(name, label) {
+    return '<div class="field"><label>' + label + '</label><textarea id="' + name + '" maxlength="300" rows="3"></textarea></div>';
+  }
+
+  function showSatisfactionSurvey(summary) {
+    render(
+      '<h1>Quick feedback</h1>' +
+      '<p class="subtitle">Help us improve this program — takes under a minute.</p>' +
+      '<div class="card">' +
+      ratingField('instructor_rating', 'How would you rate the instructor?', 5) +
+      ratingField('content_relevance', 'How relevant was the content to your goals?', 5) +
+      ratingField('delivery_satisfaction', 'How satisfied were you with how the program was delivered?', 5) +
+      ratingField('nps_score', 'How likely are you to recommend this program to a friend? (0 = not likely, 10 = very likely)', 10) +
+      textareaField('open_positive', 'What did you like most? (optional)') +
+      textareaField('open_improve', 'What could be improved? (optional)') +
+      '<button class="btn" id="surveySubmit" disabled>Submit feedback</button>' +
+      '<button class="btn-link" id="surveySkip">Skip for now</button>' +
+      '<p class="error" id="surveyError"></p>' +
+      '</div>',
+    );
+
+    var answers = {};
+    var submitBtn = document.getElementById('surveySubmit');
+    function checkComplete() {
+      submitBtn.disabled = SURVEY_RATING_FIELDS.some(function (f) { return answers[f] === undefined; });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.rating-row button'), function (btn) {
+      btn.addEventListener('click', function () {
+        var group = btn.parentElement;
+        Array.prototype.forEach.call(group.querySelectorAll('button'), function (b) { b.classList.remove('selected'); });
+        btn.classList.add('selected');
+        answers[btn.dataset.field] = Number(btn.dataset.rating);
+        checkComplete();
+      });
+    });
+    submitBtn.addEventListener('click', function () {
+      submitBtn.disabled = true;
+      var payload = Object.assign({ learner_token: state.learnerToken }, answers);
+      var positive = val('open_positive');
+      var improve = val('open_improve');
+      if (positive) payload.open_positive = positive;
+      if (improve) payload.open_improve = improve;
+      api('/' + COHORT_TOKEN + '/satisfaction', { method: 'POST', body: JSON.stringify(payload) })
+        .then(function () {
+          markSatisfactionDone();
+          showScoreSummary(summary);
+        })
+        .catch(function (err) {
+          document.getElementById('surveyError').textContent = err.message;
+          submitBtn.disabled = false;
+        });
+    });
+    document.getElementById('surveySkip').addEventListener('click', function () {
+      markSatisfactionDone();
+      showScoreSummary(summary);
+    });
   }
 
   function showScoreSummary(summary) {

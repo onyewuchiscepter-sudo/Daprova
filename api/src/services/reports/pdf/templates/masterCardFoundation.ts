@@ -1,6 +1,6 @@
 
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { drawKeyValueGrid, drawNumberedList, drawParagraph, drawReportHeader, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
+import { drawKeyValueGrid, drawNumberedList, drawParagraph, drawReportHeader, drawSatisfactionSection, drawSectionTitle, drawTable, formatPct, formatSigned } from '../primitives.js';
 
 // Required sections per spec: Programme overview, theory of change
 // alignment, learner demographics, pre/post learning gains, equity
@@ -55,6 +55,8 @@ export function renderMasterCardFoundation(doc: PDFKit.PDFDocument, data: Report
   drawSectionTitle(doc, 'Equity Breakdown');
   drawTable(doc, ['Location', 'n', 'Mean gain', 'Pass rate'], data.equity.by_location.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
   drawTable(doc, ['Age group', 'n', 'Mean gain', 'Pass rate'], data.equity.by_age_group.map((g) => [g.label, String(g.n), formatSigned(g.mean_gain), formatPct(g.pass_rate)]));
+
+  drawSatisfactionSection(doc, 'Learner Feedback', data.satisfaction);
 
   drawSectionTitle(doc, 'Key Achievements');
   const achievements: string[] = [];

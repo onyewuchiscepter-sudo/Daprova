@@ -90,4 +90,33 @@ export function table(headers: string[], rows: string[][], columnWidths?: number
   });
 }
 
+// Module 5 (S11) — shared across all 4 templates rather than duplicated,
+// since every funder gets the same 4 numbers + top quotes; only the section
+// title varies by template to match that funder's terminology. Returns []
+// (safe to spread) when null, i.e. no survey responses yet.
+export function satisfactionSection(
+  title: string,
+  satisfaction: {
+    response_count: number;
+    avg_instructor_rating: number | null;
+    avg_content_relevance: number | null;
+    avg_delivery_satisfaction: number | null;
+    nps_score: number | null;
+    top_comments: string[];
+  } | null,
+): (Paragraph | Table)[] {
+  if (!satisfaction) return [];
+  return [
+    sectionTitle(title),
+    keyValueGrid([
+      ['Instructor rating', satisfaction.avg_instructor_rating !== null ? `${satisfaction.avg_instructor_rating} / 5` : '—'],
+      ['Content relevance', satisfaction.avg_content_relevance !== null ? `${satisfaction.avg_content_relevance} / 5` : '—'],
+      ['Delivery satisfaction', satisfaction.avg_delivery_satisfaction !== null ? `${satisfaction.avg_delivery_satisfaction} / 5` : '—'],
+      ['Net Promoter Score', satisfaction.nps_score !== null ? String(satisfaction.nps_score) : '—'],
+    ]),
+    paragraph(`Based on ${satisfaction.response_count} learner response${satisfaction.response_count === 1 ? '' : 's'}.`),
+    ...(satisfaction.top_comments.length > 0 ? numberedList(satisfaction.top_comments.map((c) => `"${c}"`)) : []),
+  ];
+}
+
 export { formatPct, formatSigned } from '../format.js';

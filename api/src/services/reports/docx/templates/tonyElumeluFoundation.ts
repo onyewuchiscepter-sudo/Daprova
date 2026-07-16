@@ -1,6 +1,6 @@
 import type { Paragraph, Table } from 'docx';
 import type { ReportDataContract } from '../../../reportDataService.js';
-import { formatPct, formatSigned, keyValueGrid, paragraph, reportHeader, sectionTitle, table } from '../primitives.js';
+import { formatPct, formatSigned, keyValueGrid, paragraph, reportHeader, satisfactionSection, sectionTitle, table } from '../primitives.js';
 
 export function renderTonyElumeluFoundation(data: ReportDataContract): (Paragraph | Table)[] {
   return [
@@ -46,6 +46,8 @@ export function renderTonyElumeluFoundation(data: ReportDataContract): (Paragrap
           : '—',
       ],
     ]),
+
+    ...satisfactionSection('Programme Satisfaction', data.satisfaction),
 
     sectionTitle('Next Steps'),
     paragraph(data.narrative.next_steps),
