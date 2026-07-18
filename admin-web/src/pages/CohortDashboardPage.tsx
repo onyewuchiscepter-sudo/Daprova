@@ -9,6 +9,7 @@ type Cohort = {
   status: string;
   pre_link_token: string;
   post_link_token: string;
+  satisfaction_link_token: string;
   total_enrolled: number;
   pre_completed: number;
   post_completed: number;
@@ -171,7 +172,7 @@ export default function CohortDashboardPage() {
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: (type: 'pre' | 'post') =>
+    mutationFn: (type: 'pre' | 'post' | 'satisfaction') =>
       apiFetch(`/api/v1/cohorts/${id}/regenerate-link`, { method: 'POST', body: JSON.stringify({ type }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
@@ -228,8 +229,8 @@ export default function CohortDashboardPage() {
     URL.revokeObjectURL(url);
   }
 
-  function copyLink(token: string) {
-    navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/assess/${token}`);
+  function copyLink(token: string, basePath: 'assess' | 'satisfaction' = 'assess') {
+    navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/${basePath}/${token}`);
   }
 
   async function downloadLearnersCsv() {
@@ -288,9 +289,16 @@ export default function CohortDashboardPage() {
         <p className="text-sm text-red-600 mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
       )}
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <LinkCard label="Pre-assessment link" token={cohort.pre_link_token} onCopy={copyLink} onRegenerate={() => regenerateMutation.mutate('pre')} />
         <LinkCard label="Post-assessment link" token={cohort.post_link_token} onCopy={copyLink} onRegenerate={() => regenerateMutation.mutate('post')} />
+        <LinkCard
+          label="Satisfaction survey link"
+          token={cohort.satisfaction_link_token}
+          basePath="satisfaction"
+          onCopy={(t) => copyLink(t, 'satisfaction')}
+          onRegenerate={() => regenerateMutation.mutate('satisfaction')}
+        />
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -663,12 +671,24 @@ export default function CohortDashboardPage() {
   );
 }
 
-function LinkCard({ label, token, onCopy, onRegenerate }: { label: string; token: string; onCopy: (t: string) => void; onRegenerate: () => void }) {
+function LinkCard({
+  label,
+  token,
+  basePath = 'assess',
+  onCopy,
+  onRegenerate,
+}: {
+  label: string;
+  token: string;
+  basePath?: 'assess' | 'satisfaction';
+  onCopy: (t: string) => void;
+  onRegenerate: () => void;
+}) {
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
       <p className="text-xs text-slate-700 truncate mb-2">
-        {ASSESSMENT_WEB_ORIGIN}/assess/{token}
+        {ASSESSMENT_WEB_ORIGIN}/{basePath}/{token}
       </p>
       <div className="flex gap-2">
         <button onClick={() => onCopy(token)} className="text-xs border rounded px-2 py-1 hover:bg-slate-100">

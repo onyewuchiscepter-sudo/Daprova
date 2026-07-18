@@ -118,6 +118,7 @@ export interface CohortsTable {
   status: Generated<string>;
   pre_link_token: string;
   post_link_token: string;
+  satisfaction_link_token: string;
   pass_threshold: Generated<number>;
   created_by: string | null;
   cohort_number: number | null;

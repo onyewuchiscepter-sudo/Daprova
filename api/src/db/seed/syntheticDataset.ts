@@ -100,6 +100,7 @@ async function main() {
       name: `Synthetic Cohort (n=${N_LEARNERS})`,
       pre_link_token: crypto.randomUUID(),
       post_link_token: crypto.randomUUID(),
+      satisfaction_link_token: crypto.randomUUID(),
       created_by: adminMembership.person_id,
     })
     .returningAll()

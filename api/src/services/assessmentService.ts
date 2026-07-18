@@ -272,20 +272,50 @@ type SatisfactionInput = {
   open_improve?: string;
 };
 
-// Module 5 (S11) — appended to the post-assessment flow only (spec: a
-// satisfaction survey about the program makes no sense before a learner has
-// experienced it). Upserted rather than insert-only since assessment-web
-// re-renders this screen on every post-link revisit until the learner has
-// answered it, and a resubmission (e.g. after a network retry) should
-// overwrite rather than duplicate.
+// Module 5 (S11) — its own shareable link (like pre_link_token/post_link_token),
+// not chained onto the post-assessment flow — an org may send this out on its
+// own schedule, so it deliberately doesn't check assessment_sessions at all,
+// just that the learner belongs to this cohort.
+async function resolveCohortBySatisfactionToken(cohortToken: string) {
+  const cohort = await db
+    .selectFrom('cohorts')
+    .selectAll()
+    .where('satisfaction_link_token', '=', cohortToken)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!cohort) throw notFound('Satisfaction survey link not found or has been invalidated');
+  return cohort;
+}
+
+// A learner who never opened this exact link before (e.g. it was shared
+// separately from the pre/post links, or on a different device) has no
+// learner_token in this device's localStorage yet — enrolment_id is the one
+// piece of identifying info every learner already gave at pre-assessment, so
+// it's the lookup key here rather than collecting a fresh identity.
+export async function identifyLearnerForSatisfaction(cohortToken: string, enrolmentId: string) {
+  const cohort = await resolveCohortBySatisfactionToken(cohortToken);
+  const learner = await db
+    .selectFrom('learners')
+    .selectAll()
+    .where('cohort_id', '=', cohort.id)
+    .where('enrolment_id', '=', enrolmentId)
+    .executeTakeFirst();
+  if (!learner) throw notFound("We couldn't find that enrolment ID for this program.");
+  return { learner_token: learner.learner_token };
+}
+
+// Upserted rather than insert-only since a learner can revisit the link, and
+// a resubmission (e.g. after a network retry, or genuinely changing their
+// answer) should overwrite rather than duplicate.
 export async function submitSatisfaction(cohortToken: string, learnerToken: string, input: SatisfactionInput) {
-  const { cohort, learner, session } = await resolveLearnerSession(cohortToken, learnerToken);
-  if (session.session_type !== 'post') {
-    throw badRequest('The satisfaction survey is only available on the post-assessment link');
-  }
-  if (session.status === 'started') {
-    throw badRequest('Complete the post-assessment before submitting the satisfaction survey');
-  }
+  const cohort = await resolveCohortBySatisfactionToken(cohortToken);
+  const learner = await db
+    .selectFrom('learners')
+    .selectAll()
+    .where('learner_token', '=', learnerToken)
+    .where('cohort_id', '=', cohort.id)
+    .executeTakeFirst();
+  if (!learner) throw notFound('Learner not found for this link');
 
   const existing = await db
     .selectFrom('satisfaction_responses')

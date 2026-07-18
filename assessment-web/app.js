@@ -9,6 +9,9 @@
     return parts[parts.length - 1];
   }
   var COHORT_TOKEN = getCohortToken();
+  // Module 5 (S11) — its own link (/satisfaction/:token), separate from
+  // /assess/:token, so it isn't tied to the pre/post assessment flow at all.
+  var IS_SATISFACTION_LINK = location.pathname.split('/').filter(Boolean)[0] === 'satisfaction';
 
   // ---------- localStorage: learner identity persists across visits (FR-M2-06) ----------
   var LEARNER_KEY_PREFIX = 'daprova_learner_';
@@ -310,30 +313,53 @@
         method: 'POST',
         body: JSON.stringify({ learner_token: state.learnerToken, confidence: confidence }),
       });
-    }).then(afterAssessmentComplete).catch(function (err) { showError(err.message); });
+    }).then(showScoreSummary).catch(function (err) { showError(err.message); });
   }
 
   function showResultScreen() {
-    api('/' + COHORT_TOKEN + '/result/' + state.learnerToken).then(afterAssessmentComplete).catch(function (err) { showError(err.message); });
+    api('/' + COHORT_TOKEN + '/result/' + state.learnerToken).then(showScoreSummary).catch(function (err) { showError(err.message); });
   }
 
-  // Module 5 (S11) — the satisfaction survey only makes sense once a learner
-  // has actually experienced the program, so it's appended after the
-  // post-assessment (never the pre-assessment) rather than being its own
-  // separate link. "Done" is tracked per learner in localStorage (submit or
-  // skip both count) purely to avoid re-prompting on every revisit to the
-  // post link — the server itself doesn't need to know "skipped" vs
-  // "answered", it only ever sees a submission or nothing.
-  function satisfactionKey() { return 'daprova_satisfaction_' + state.learnerToken; }
-  function satisfactionDone() { return localStorage.getItem(satisfactionKey()) === '1'; }
-  function markSatisfactionDone() { localStorage.setItem(satisfactionKey(), '1'); }
-
-  function afterAssessmentComplete(summary) {
-    if (summary.session_type === 'post' && !satisfactionDone()) {
-      showSatisfactionSurvey(summary);
+  // ---------- Module 5 (S11): standalone satisfaction survey link ----------
+  // Its own link (/satisfaction/:token), not chained onto the post-assessment
+  // flow — an org can send this out on its own schedule. getStoredLearnerToken()
+  // already falls back to any learner_token on this device regardless of
+  // which link it was set under, so a device that already did pre/post is
+  // recognised automatically; a fresh device needs the enrolment ID lookup.
+  function bootSatisfactionLink() {
+    if (state.learnerToken) {
+      showSatisfactionSurvey();
     } else {
-      showScoreSummary(summary);
+      showEnrolmentIdentifyForm();
     }
+  }
+
+  function showEnrolmentIdentifyForm() {
+    render(
+      '<h1>Share your feedback</h1>' +
+      '<p class="subtitle">Enter your enrolment / student ID to continue.</p>' +
+      '<div class="card">' +
+      textField('enrolment_id', 'Enrolment / student ID') +
+      '<button class="btn" id="identifyBtn" disabled>Continue</button>' +
+      '<p class="error" id="identifyError"></p>' +
+      '</div>',
+    );
+    var input = document.getElementById('enrolment_id');
+    var btn = document.getElementById('identifyBtn');
+    input.addEventListener('input', function () { btn.disabled = !input.value; });
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      api('/' + COHORT_TOKEN + '/satisfaction/identify', { method: 'POST', body: JSON.stringify({ enrolment_id: input.value }) })
+        .then(function (data) {
+          state.learnerToken = data.learner_token;
+          storeLearnerToken(data.learner_token);
+          showSatisfactionSurvey();
+        })
+        .catch(function (err) {
+          document.getElementById('identifyError').textContent = err.message;
+          btn.disabled = false;
+        });
+    });
   }
 
   var SURVEY_RATING_FIELDS = ['instructor_rating', 'content_relevance', 'delivery_satisfaction', 'nps_score'];
@@ -349,7 +375,7 @@
     return '<div class="field"><label>' + label + '</label><textarea id="' + name + '" maxlength="300" rows="3"></textarea></div>';
   }
 
-  function showSatisfactionSurvey(summary) {
+  function showSatisfactionSurvey() {
     render(
       '<h1>Quick feedback</h1>' +
       '<p class="subtitle">Help us improve this program — takes under a minute.</p>' +
@@ -361,7 +387,6 @@
       textareaField('open_positive', 'What did you like most? (optional)') +
       textareaField('open_improve', 'What could be improved? (optional)') +
       '<button class="btn" id="surveySubmit" disabled>Submit feedback</button>' +
-      '<button class="btn-link" id="surveySkip">Skip for now</button>' +
       '<p class="error" id="surveyError"></p>' +
       '</div>',
     );
@@ -388,19 +413,16 @@
       if (positive) payload.open_positive = positive;
       if (improve) payload.open_improve = improve;
       api('/' + COHORT_TOKEN + '/satisfaction', { method: 'POST', body: JSON.stringify(payload) })
-        .then(function () {
-          markSatisfactionDone();
-          showScoreSummary(summary);
-        })
+        .then(showSatisfactionThankYou)
         .catch(function (err) {
           document.getElementById('surveyError').textContent = err.message;
           submitBtn.disabled = false;
         });
     });
-    document.getElementById('surveySkip').addEventListener('click', function () {
-      markSatisfactionDone();
-      showScoreSummary(summary);
-    });
+  }
+
+  function showSatisfactionThankYou() {
+    render('<h1>Thank you!</h1><p class="subtitle">Your feedback has been recorded — thanks for helping us improve the program.</p>');
   }
 
   function showScoreSummary(summary) {
@@ -428,7 +450,9 @@
 
   // ---------- Boot ----------
   if (!COHORT_TOKEN) {
-    showError('Invalid assessment link.');
+    showError('Invalid link.');
+  } else if (IS_SATISFACTION_LINK) {
+    bootSatisfactionLink();
   } else if (state.learnerToken) {
     begin({});
   } else {

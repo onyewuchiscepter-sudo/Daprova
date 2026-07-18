@@ -99,6 +99,19 @@ assessRouter.get('/:cohortToken/result/:learnerToken', async (req, res, next) =>
   }
 });
 
+// Module 5 (S11) — resolves an existing learner by enrolment_id when this
+// device has no stored learner_token for the satisfaction link (e.g. it's a
+// different device than the one used for pre/post assessment).
+const identifySchema = z.object({ enrolment_id: z.string().min(1) });
+assessRouter.post('/:cohortToken/satisfaction/identify', async (req, res, next) => {
+  try {
+    const body = parse(identifySchema, req.body);
+    res.json(await assessmentService.identifyLearnerForSatisfaction(req.params.cohortToken, body.enrolment_id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Module 5 (S11) — 6 questions per the PRD: 3 star-style ratings (1-5), an
 // NPS score (0-10), and two optional open-text fields capped at 300 chars.
 const satisfactionSchema = z.object({

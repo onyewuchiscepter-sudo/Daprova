@@ -77,6 +77,7 @@ export async function createCohort(
       end_date: opts.end_date ? new Date(opts.end_date) : null,
       pre_link_token: crypto.randomUUID(),
       post_link_token: crypto.randomUUID(),
+      satisfaction_link_token: crypto.randomUUID(),
       pass_threshold: opts.pass_threshold ?? 60,
       created_by: userId,
       cohort_number: cohortNumber,
@@ -205,9 +206,9 @@ export async function listCohortLearners(orgId: string, cohortId: string) {
 }
 
 // US-06: admin can regenerate a link, invalidating the old one.
-export async function regenerateLinkToken(orgId: string, cohortId: string, type: 'pre' | 'post') {
+export async function regenerateLinkToken(orgId: string, cohortId: string, type: 'pre' | 'post' | 'satisfaction') {
   await assertCohortOwnership(orgId, cohortId);
   const newToken = crypto.randomUUID();
-  const column = type === 'pre' ? 'pre_link_token' : 'post_link_token';
+  const column = type === 'pre' ? 'pre_link_token' : type === 'post' ? 'post_link_token' : 'satisfaction_link_token';
   return db.updateTable('cohorts').set({ [column]: newToken }).where('id', '=', cohortId).returningAll().executeTakeFirstOrThrow();
 }

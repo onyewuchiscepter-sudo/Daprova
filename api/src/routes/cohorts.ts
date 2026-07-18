@@ -79,7 +79,7 @@ cohortsRouter.get('/:id/learners/export.csv', async (req, res, next) => {
   }
 });
 
-const regenerateLinkSchema = z.object({ type: z.enum(['pre', 'post']) });
+const regenerateLinkSchema = z.object({ type: z.enum(['pre', 'post', 'satisfaction']) });
 cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
   try {
     const body = parse(regenerateLinkSchema, req.body);
