@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api';
 
-type Template = { id: string; name: string; category: string; area_count: number };
+type Template = { id: string; name: string; category: string; course_count: number; area_count: number };
 type Framework = { id: string; name: string; category: string };
 
 const CATEGORIES = [
@@ -85,7 +85,14 @@ export default function NewCoursePage() {
 
       {mode === 'template' && (
         <div className="grid grid-cols-2 gap-3 mb-6">
-          {templates?.map((t) => (
+          <p className="col-span-2 text-xs text-slate-400">
+            Looking for a whole curriculum instead of one course?{' '}
+            <Link to="/frameworks/import" className="underline">
+              Import a framework template
+            </Link>
+            .
+          </p>
+          {templates?.filter((t) => t.course_count === 1).map((t) => (
             <button
               key={t.id}
               onClick={() => {

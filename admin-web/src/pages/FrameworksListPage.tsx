@@ -20,9 +20,14 @@ export default function FrameworksListPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-semibold text-slate-900">Competency Frameworks</h1>
-        <Link to="/courses/new" className="bg-slate-900 text-white text-sm rounded px-4 py-2">
-          + New Course
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/frameworks/import" className="text-sm border rounded px-4 py-2 hover:bg-slate-100">
+            Import template
+          </Link>
+          <Link to="/courses/new" className="bg-slate-900 text-white text-sm rounded px-4 py-2">
+            + New Course
+          </Link>
+        </div>
       </div>
 
       {isLoading && <p className="text-slate-500">Loading…</p>}

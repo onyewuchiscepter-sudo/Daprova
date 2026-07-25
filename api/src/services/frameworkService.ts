@@ -16,9 +16,12 @@ export async function assertFrameworkOwnership(orgId: string, frameworkId: strin
   return framework;
 }
 
-// Templates are ordinary frameworks (is_template=true) that hold exactly one
-// template course, seeded together — see db/seed/frameworks.ts. Picking a
-// template clones both in one step (cloneTemplateForNewCourse below).
+// Templates are ordinary frameworks (is_template=true) holding one or more
+// template courses, seeded together — see db/seed/frameworks.ts. A
+// single-course template clones into a new course with a caller-chosen name
+// (cloneTemplateForNewCourse, used by "New Course" -> "From a template"); a
+// multi-course template imports its whole framework + every course at once
+// (importTemplateFramework, used by the "Import a framework template" flow).
 export async function listTemplates() {
   const templates = await db
     .selectFrom('competency_frameworks')
@@ -30,18 +33,57 @@ export async function listTemplates() {
 
   return Promise.all(
     templates.map(async (t) => {
-      const templateCourse = await db
-        .selectFrom('courses')
-        .select(['id'])
-        .where('framework_id', '=', t.id)
-        .where('is_template', '=', true)
-        .executeTakeFirst();
-      const areas = templateCourse
-        ? await db.selectFrom('competency_areas').select(['id']).where('course_id', '=', templateCourse.id).where('is_active', '=', true).execute()
-        : [];
-      return { id: t.id, name: t.name, category: t.category, area_count: areas.length };
+      const templateCourses = await db.selectFrom('courses').select(['id']).where('framework_id', '=', t.id).where('is_template', '=', true).execute();
+      let areaCount = 0;
+      for (const c of templateCourses) {
+        const areas = await db.selectFrom('competency_areas').select(['id']).where('course_id', '=', c.id).where('is_active', '=', true).execute();
+        areaCount += areas.length;
+      }
+      return { id: t.id, name: t.name, category: t.category, course_count: templateCourses.length, area_count: areaCount };
     }),
   );
+}
+
+// Clones an entire template framework and every one of its template
+// courses (each keeping its own name) into a brand-new, org-owned
+// framework — for templates that represent a whole curriculum (many
+// courses) rather than a single course.
+export async function importTemplateFramework(orgId: string, userId: string, templateId: string) {
+  const templateFramework = await db
+    .selectFrom('competency_frameworks')
+    .selectAll()
+    .where('id', '=', templateId)
+    .where('is_template', '=', true)
+    .executeTakeFirst();
+  if (!templateFramework) throw notFound('Template not found');
+
+  const templateCourses = await db
+    .selectFrom('courses')
+    .selectAll()
+    .where('framework_id', '=', templateFramework.id)
+    .where('is_template', '=', true)
+    .orderBy('created_at')
+    .execute();
+  if (templateCourses.length === 0) throw notFound('Template has no courses');
+
+  const framework = await db
+    .insertInto('competency_frameworks')
+    .values({ org_id: orgId, name: templateFramework.name, category: templateFramework.category, created_by: userId })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  const courses = [];
+  for (const templateCourse of templateCourses) {
+    const course = await db
+      .insertInto('courses')
+      .values({ org_id: orgId, framework_id: framework.id, name: templateCourse.name, category: templateCourse.category })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await cloneAreasAndQuestions(templateCourse.id, course.id);
+    courses.push(course);
+  }
+
+  return { ...framework, courses };
 }
 
 export async function listFrameworks(orgId: string) {

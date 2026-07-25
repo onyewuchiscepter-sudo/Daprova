@@ -7,6 +7,7 @@ import SignupPage from './pages/SignupPage';
 import ContactSalesPage from './pages/ContactSalesPage';
 import FrameworksListPage from './pages/FrameworksListPage';
 import FrameworkDetailPage from './pages/FrameworkDetailPage';
+import ImportFrameworkTemplatePage from './pages/ImportFrameworkTemplatePage';
 import CoursesListPage from './pages/CoursesListPage';
 import NewCoursePage from './pages/NewCoursePage';
 import CourseDetailPage from './pages/CourseDetailPage';
@@ -39,6 +40,7 @@ function AppRoutes() {
         }
       >
         <Route path="/frameworks" element={<FrameworksListPage />} />
+        <Route path="/frameworks/import" element={<ImportFrameworkTemplatePage />} />
         <Route path="/frameworks/:id" element={<FrameworkDetailPage />} />
         <Route path="/courses" element={<CoursesListPage />} />
         <Route path="/courses/new" element={<NewCoursePage />} />

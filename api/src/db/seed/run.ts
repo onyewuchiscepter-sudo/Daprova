@@ -1,6 +1,6 @@
 import { db } from '../index.js';
 import { firebaseAuth } from '../../lib/firebaseAdmin.js';
-import { seedFrameworkTemplates } from './frameworks.js';
+import { seedFrameworkTemplates, seedMultiCourseTemplate } from './frameworks.js';
 
 const DEV_ORG = { name: 'Acme EdTech (Dev)', slug: 'acme-edtech-dev', contact_email: 'admin@acme-edtech.test' };
 const DEV_ADMIN = { email: 'admin@acme-edtech.test', password: 'devpassword123', display_name: 'Dev Admin' };
@@ -73,6 +73,7 @@ async function main() {
   }
 
   await seedFrameworkTemplates();
+  await seedMultiCourseTemplate();
 
   console.log('[seed] done. Login with:');
   console.log(`  admin:  ${DEV_ADMIN.email} / ${DEV_ADMIN.password}`);

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js';
-import { seedFrameworkTemplates } from '../db/seed/frameworks.js';
+import { seedFrameworkTemplates, seedMultiCourseTemplate } from '../db/seed/frameworks.js';
 
 export const bootstrapRouter = Router();
 
@@ -20,6 +20,7 @@ bootstrapRouter.post('/templates', async (req, res, next) => {
 
     const before = await db.selectFrom('competency_frameworks').select('id').where('is_template', '=', true).execute();
     await seedFrameworkTemplates();
+    await seedMultiCourseTemplate();
     const after = await db.selectFrom('competency_frameworks').select('id').where('is_template', '=', true).execute();
 
     res.json({ templates_before: before.length, templates_after: after.length });

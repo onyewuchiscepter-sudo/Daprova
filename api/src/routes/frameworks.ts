@@ -22,6 +22,19 @@ frameworksRouter.get('/templates', async (_req, res, next) => {
   }
 });
 
+// Imports a whole multi-course template (framework + every course under it)
+// into this org — distinct from POST /courses's single-course template pick.
+const importTemplateSchema = z.object({ templateId: z.string().uuid() });
+frameworksRouter.post('/from-template', async (req, res, next) => {
+  try {
+    const body = parse(importTemplateSchema, req.body);
+    const result = await frameworkService.importTemplateFramework(req.auth!.org_id!, req.auth!.sub, body.templateId);
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 frameworksRouter.get('/', async (req, res, next) => {
   try {
     res.json(await frameworkService.listFrameworks(req.auth!.org_id!));

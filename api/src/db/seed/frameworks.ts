@@ -70,3 +70,89 @@ export async function seedFrameworkTemplates() {
     console.log(`[seed] created template "${template.name}" (${template.areas.length} areas)`);
   }
 }
+
+// A multi-course template — the whole "SME Digital & Business Skills"
+// curriculum as one importable unit (frameworkService.importTemplateFramework),
+// rather than one course at a time. Structure only, deliberately: each
+// template course starts with zero competency areas, ready for whoever
+// imports it to add areas and bulk-upload questions themselves.
+const SME_FRAMEWORK = { name: 'SME Digital & Business Skills', category: 'business_skills' };
+const SME_COURSES = [
+  'Microsoft Excel',
+  'Microsoft Word',
+  'Google Tools',
+  'Invoicing Tools',
+  'Inventory Management Tools',
+  'Cloud Storage Tools',
+  'Recording Tools',
+  'Online Meeting Tools',
+  'Retail Management Tools',
+  'AI Tools',
+  'Project Management Tools',
+  'Bookkeeping Tools',
+  'Expense Management Tools',
+  'Note-Taking Tools',
+  'Email Writing Tools',
+  'Order Management Tools',
+  'Checklist Tools',
+  'Classroom Tools',
+  'Presentation Tools',
+  'Design Tools',
+  'CRM Tools',
+  'Report Writing',
+  'Communication',
+  'Work Ethics',
+  'Time Management',
+  'Negotiation',
+  'Reconciliations',
+  'Freelancing',
+  'Inventory Management',
+  'Money Management',
+  'Proposal Writing',
+  'Mastering Software',
+  'Recordkeeping',
+  'Supporting SMEs',
+];
+
+export async function seedMultiCourseTemplate() {
+  const systemOrg = await db
+    .selectFrom('organisations')
+    .selectAll()
+    .where('slug', '=', SYSTEM_ORG.slug)
+    .executeTakeFirst()
+    .then((existing) => existing ?? db.insertInto('organisations').values(SYSTEM_ORG).returningAll().executeTakeFirstOrThrow());
+
+  const existing = await db
+    .selectFrom('competency_frameworks')
+    .selectAll()
+    .where('org_id', '=', systemOrg.id)
+    .where('name', '=', SME_FRAMEWORK.name)
+    .where('is_template', '=', true)
+    .executeTakeFirst();
+  if (existing) {
+    console.log(`[seed] template "${SME_FRAMEWORK.name}" already exists, skipping`);
+    return;
+  }
+
+  const framework = await db
+    .insertInto('competency_frameworks')
+    .values({ org_id: systemOrg.id, name: SME_FRAMEWORK.name, category: SME_FRAMEWORK.category, is_template: true })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  await db
+    .insertInto('courses')
+    .values(
+      SME_COURSES.map((name) => ({
+        org_id: systemOrg.id,
+        framework_id: framework.id,
+        name,
+        category: SME_FRAMEWORK.category,
+        is_template: true,
+        is_locked: true,
+      })),
+    )
+    .execute();
+
+  console.log(`[seed] created template "${SME_FRAMEWORK.name}" (${SME_COURSES.length} courses)`);
+}
