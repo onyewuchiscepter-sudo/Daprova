@@ -58,6 +58,25 @@ coursesRouter.get('/:id', async (req, res, next) => {
   }
 });
 
+const updateCourseSchema = z.object({ name: z.string().min(1) });
+coursesRouter.patch('/:id', async (req, res, next) => {
+  try {
+    const body = parse(updateCourseSchema, req.body);
+    res.json(await frameworkService.updateCourse(req.auth!.org_id!, req.params.id, body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+coursesRouter.delete('/:id', async (req, res, next) => {
+  try {
+    await frameworkService.deleteCourse(req.auth!.org_id!, req.params.id);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // "Clone to make changes" (FR-M1-05) — a locked course can't be edited
 // directly; this makes a fresh unlocked copy under the same framework.
 const cloneCourseSchema = z.object({ name: z.string().min(1).optional() });

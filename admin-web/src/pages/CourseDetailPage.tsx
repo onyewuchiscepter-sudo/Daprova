@@ -58,6 +58,9 @@ export default function CourseDetailPage() {
   const [bulkUploadAreaId, setBulkUploadAreaId] = useState<string | null>(null);
   const [bulkErrors, setBulkErrors] = useState<string[] | null>(null);
   const [cohortName, setCohortName] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [courseName, setCourseName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: course, isLoading, error } = useQuery<CourseDetail>({
     queryKey: ['course', id],
@@ -155,6 +158,22 @@ export default function CourseDetailPage() {
     },
   });
 
+  const renameMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/courses/${id}`, { method: 'PATCH', body: JSON.stringify({ name: courseName }) }),
+    onSuccess: () => {
+      setEditingName(false);
+      return queryClient.invalidateQueries({ queryKey: ['course', id] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/courses/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['courses'] });
+      navigate('/courses');
+    },
+  });
+
   const createCohortMutation = useMutation({
     mutationFn: () => apiFetch(`/api/v1/courses/${id}/cohorts`, { method: 'POST', body: JSON.stringify({ name: cohortName }) }),
     onSuccess: () => {
@@ -186,7 +205,30 @@ export default function CourseDetailPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-lg font-semibold text-slate-900">{course.name}</h1>
+        {editingName ? (
+          <div className="flex items-center gap-2">
+            <input className="border rounded px-2 py-1 text-lg font-semibold" value={courseName} onChange={(e) => setCourseName(e.target.value)} autoFocus />
+            <button onClick={() => renameMutation.mutate()} disabled={!courseName || renameMutation.isPending} className="text-sm text-slate-700 underline">
+              Save
+            </button>
+            <button onClick={() => setEditingName(false)} className="text-sm text-slate-500 underline">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-slate-900">{course.name}</h1>
+            <button
+              onClick={() => {
+                setCourseName(course.name);
+                setEditingName(true);
+              }}
+              className="text-xs text-slate-500 hover:underline"
+            >
+              Rename
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {course.is_locked && <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-1">Locked</span>}
           <button
@@ -196,6 +238,21 @@ export default function CourseDetailPage() {
           >
             Clone
           </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-600">Delete?</span>
+              <button onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="text-red-600 underline">
+                {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="text-slate-500 underline">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="text-sm text-red-600 hover:underline">
+              Delete
+            </button>
+          )}
         </div>
       </div>
       <p className="text-sm text-slate-500 mb-6">
@@ -204,6 +261,7 @@ export default function CourseDetailPage() {
           {course.framework.name}
         </Link>
       </p>
+      {deleteMutation.isError && <p className="text-sm text-red-600 mb-4">{(deleteMutation.error as Error).message}</p>}
 
       {course.is_locked && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3 mb-6">

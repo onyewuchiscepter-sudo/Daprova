@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../api';
 
 type Course = { id: string; name: string; category: string; is_locked: boolean; created_at: string };
@@ -11,9 +11,11 @@ type FrameworkDetail = { id: string; name: string; category: string; version: nu
 // CourseDetailPage), so there's no area editor here anymore.
 export default function FrameworkDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: framework, isLoading, error } = useQuery<FrameworkDetail>({
     queryKey: ['framework', id],
@@ -25,6 +27,14 @@ export default function FrameworkDetailPage() {
     onSuccess: () => {
       setEditingName(false);
       return queryClient.invalidateQueries({ queryKey: ['framework', id] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/frameworks/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['frameworks'] });
+      navigate('/frameworks');
     },
   });
 
@@ -58,9 +68,27 @@ export default function FrameworkDetailPage() {
           </button>
         </div>
       )}
-      <p className="text-sm text-slate-500 mb-6">
-        {framework.category} · v{framework.version}
-      </p>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-slate-500">
+          {framework.category} · v{framework.version}
+        </p>
+        {confirmDelete ? (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-600">Delete this framework?</span>
+            <button onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="text-red-600 underline">
+              {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
+            </button>
+            <button onClick={() => setConfirmDelete(false)} className="text-slate-500 underline">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setConfirmDelete(true)} className="text-sm text-red-600 hover:underline">
+            Delete framework
+          </button>
+        )}
+      </div>
+      {deleteMutation.isError && <p className="text-sm text-red-600 mb-4">{(deleteMutation.error as Error).message}</p>}
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-medium text-slate-900">Courses</h2>

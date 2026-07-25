@@ -50,3 +50,12 @@ frameworksRouter.patch('/:id', async (req, res, next) => {
     next(err);
   }
 });
+
+frameworksRouter.delete('/:id', async (req, res, next) => {
+  try {
+    await frameworkService.deleteFramework(req.auth!.org_id!, req.params.id);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});

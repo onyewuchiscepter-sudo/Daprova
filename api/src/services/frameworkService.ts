@@ -76,6 +76,20 @@ export async function updateFrameworkName(orgId: string, frameworkId: string, na
   return db.updateTable('competency_frameworks').set({ name }).where('id', '=', frameworkId).returningAll().executeTakeFirstOrThrow();
 }
 
+// A framework that still has courses under it can't be deleted outright —
+// deleting it would silently orphan those courses (they'd keep working, but
+// the framework grouping them would vanish from every list). The admin has
+// to delete/move those courses first, same reasoning as "can't deactivate
+// the last active area."
+export async function deleteFramework(orgId: string, frameworkId: string) {
+  await assertFrameworkOwnership(orgId, frameworkId);
+  const activeCourses = await db.selectFrom('courses').select('id').where('framework_id', '=', frameworkId).where('deleted_at', 'is', null).execute();
+  if (activeCourses.length > 0) {
+    throw conflict('Cannot delete a framework that still has courses — delete or move them first');
+  }
+  await db.updateTable('competency_frameworks').set({ deleted_at: new Date() }).where('id', '=', frameworkId).execute();
+}
+
 // ---------- Course-level ownership + locking ----------
 
 export async function assertCourseOwnership(orgId: string, courseId: string) {
@@ -102,6 +116,23 @@ async function assertNotLocked(course: { is_locked: boolean }) {
 // trigger should ever call it (spec marks it Auth: System).
 export async function lockCourseIfNeeded(courseId: string) {
   await db.updateTable('courses').set({ is_locked: true }).where('id', '=', courseId).where('is_locked', '=', false).execute();
+}
+
+// Renaming a course is allowed even when locked — it doesn't touch
+// areas/questions, so FR-M1-05's immutability guarantee isn't affected.
+export async function updateCourse(orgId: string, courseId: string, opts: { name: string }) {
+  await assertCourseOwnership(orgId, courseId);
+  return db.updateTable('courses').set({ name: opts.name }).where('id', '=', courseId).returningAll().executeTakeFirstOrThrow();
+}
+
+// Soft delete, same pattern used throughout (organisations, cohorts, etc.) —
+// existing cohorts under this course keep working exactly as they do for a
+// closed org (historical data untouched), the course just stops appearing
+// in lists. No lock/cohort-activity check: archiving a course you're done
+// with is a normal action, not one that needs guarding.
+export async function deleteCourse(orgId: string, courseId: string) {
+  await assertCourseOwnership(orgId, courseId);
+  await db.updateTable('courses').set({ deleted_at: new Date() }).where('id', '=', courseId).execute();
 }
 
 // A course's areas/questions plus its parent framework's name/category, in
