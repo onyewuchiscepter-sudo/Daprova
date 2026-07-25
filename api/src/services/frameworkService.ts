@@ -2,7 +2,9 @@ import { db } from '../db/index.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { fromCsv } from '../lib/csv.js';
 
-async function assertFrameworkOwnership(orgId: string, frameworkId: string) {
+// ---------- Framework-level (top-level container, holds Courses) ----------
+
+export async function assertFrameworkOwnership(orgId: string, frameworkId: string) {
   const framework = await db
     .selectFrom('competency_frameworks')
     .selectAll()
@@ -14,11 +16,9 @@ async function assertFrameworkOwnership(orgId: string, frameworkId: string) {
   return framework;
 }
 
-async function assertNotLocked(framework: { is_locked: boolean }) {
-  // FR-M1-05: framework structure (areas/questions) is immutable once locked.
-  if (framework.is_locked) throw conflict('Framework is locked and can no longer be edited — clone it to make changes');
-}
-
+// Templates are ordinary frameworks (is_template=true) that hold exactly one
+// template course, seeded together — see db/seed/frameworks.ts. Picking a
+// template clones both in one step (cloneTemplateForNewCourse below).
 export async function listTemplates() {
   const templates = await db
     .selectFrom('competency_frameworks')
@@ -30,12 +30,15 @@ export async function listTemplates() {
 
   return Promise.all(
     templates.map(async (t) => {
-      const areas = await db
-        .selectFrom('competency_areas')
+      const templateCourse = await db
+        .selectFrom('courses')
         .select(['id'])
         .where('framework_id', '=', t.id)
-        .where('is_active', '=', true)
-        .execute();
+        .where('is_template', '=', true)
+        .executeTakeFirst();
+      const areas = templateCourse
+        ? await db.selectFrom('competency_areas').select(['id']).where('course_id', '=', templateCourse.id).where('is_active', '=', true).execute()
+        : [];
       return { id: t.id, name: t.name, category: t.category, area_count: areas.length };
     }),
   );
@@ -52,43 +55,81 @@ export async function listFrameworks(orgId: string) {
     .execute();
 }
 
-async function fullFrameworkPayload(frameworkId: string) {
-  const areas = await db
-    .selectFrom('competency_areas')
+// A framework can hold several courses (e.g. "Digital Skills" framework with
+// separate Beginner/Advanced courses) — the detail view is the framework's
+// name/category plus the list of courses under it, not areas directly
+// (those live one level down, on each course).
+export async function getFrameworkDetail(orgId: string, frameworkId: string) {
+  const framework = await assertFrameworkOwnership(orgId, frameworkId);
+  const courses = await db
+    .selectFrom('courses')
     .selectAll()
     .where('framework_id', '=', frameworkId)
-    .orderBy('display_order')
+    .where('deleted_at', 'is', null)
+    .orderBy('created_at')
     .execute();
+  return { ...framework, courses };
+}
 
+export async function updateFrameworkName(orgId: string, frameworkId: string, name: string) {
+  await assertFrameworkOwnership(orgId, frameworkId);
+  return db.updateTable('competency_frameworks').set({ name }).where('id', '=', frameworkId).returningAll().executeTakeFirstOrThrow();
+}
+
+// ---------- Course-level ownership + locking ----------
+
+export async function assertCourseOwnership(orgId: string, courseId: string) {
+  const course = await db
+    .selectFrom('courses')
+    .selectAll()
+    .where('id', '=', courseId)
+    .where('org_id', '=', orgId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!course) throw notFound('Course not found');
+  return course;
+}
+
+async function assertNotLocked(course: { is_locked: boolean }) {
+  // FR-M1-05: a course's structure (areas/questions) is immutable once
+  // locked — locking moved here from framework-level since areas now belong
+  // to a course, not the framework directly.
+  if (course.is_locked) throw conflict('Course is locked and can no longer be edited — clone it to make changes');
+}
+
+// Called internally when a cohort's first pre-assessment session starts (S3) —
+// not exposed as an admin-facing HTTP route since nothing but that internal
+// trigger should ever call it (spec marks it Auth: System).
+export async function lockCourseIfNeeded(courseId: string) {
+  await db.updateTable('courses').set({ is_locked: true }).where('id', '=', courseId).where('is_locked', '=', false).execute();
+}
+
+// A course's areas/questions plus its parent framework's name/category, in
+// one payload — mirrors the single-fetch shape the admin UI's course editor
+// relies on (previously framework-centric, now course-centric).
+export async function getCourseWithAreas(orgId: string, courseId: string) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  const framework = await db.selectFrom('competency_frameworks').selectAll().where('id', '=', course.framework_id).executeTakeFirstOrThrow();
+
+  const areas = await db.selectFrom('competency_areas').selectAll().where('course_id', '=', courseId).orderBy('display_order').execute();
   const areasWithQuestions = await Promise.all(
     areas.map(async (area) => {
-      const questions = await db
-        .selectFrom('questions')
-        .selectAll()
-        .where('area_id', '=', area.id)
-        .orderBy('created_at')
-        .execute();
+      const questions = await db.selectFrom('questions').selectAll().where('area_id', '=', area.id).orderBy('created_at').execute();
       const activeCount = questions.filter((q) => q.is_active).length;
       return { ...area, questions, active_question_warning: activeCount < 8 };
     }),
   );
 
-  return areasWithQuestions;
+  return { ...course, framework: { id: framework.id, name: framework.name, category: framework.category }, areas: areasWithQuestions };
 }
 
-export async function getFrameworkDetail(orgId: string, frameworkId: string) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  const areas = await fullFrameworkPayload(frameworkId);
-  return { ...framework, areas };
-}
-
-async function cloneAreasAndQuestions(sourceFrameworkId: string, targetFrameworkId: string) {
-  const areas = await db.selectFrom('competency_areas').selectAll().where('framework_id', '=', sourceFrameworkId).execute();
+async function cloneAreasAndQuestions(sourceCourseId: string, targetCourseId: string) {
+  const areas = await db.selectFrom('competency_areas').selectAll().where('course_id', '=', sourceCourseId).execute();
   for (const area of areas) {
     const newArea = await db
       .insertInto('competency_areas')
       .values({
-        framework_id: targetFrameworkId,
+        course_id: targetCourseId,
         name: area.name,
         description: area.description,
         display_order: area.display_order,
@@ -119,49 +160,79 @@ async function cloneAreasAndQuestions(sourceFrameworkId: string, targetFramework
   }
 }
 
-export async function createFramework(
-  orgId: string,
-  userId: string,
-  opts: { templateId?: string; name: string; category: string },
-) {
-  if (opts.templateId) {
-    const template = await db
-      .selectFrom('competency_frameworks')
-      .selectAll()
-      .where('id', '=', opts.templateId)
-      .where('is_template', '=', true)
-      .executeTakeFirst();
-    if (!template) throw notFound('Template not found');
+// The primary "create a course" entry point for templates: clones the
+// template framework AND its one template course (with areas/questions)
+// together as a single unit, so picking a template gives the org a fully
+// populated, ready-to-use course in one step.
+export async function cloneTemplateForNewCourse(orgId: string, userId: string, templateId: string, courseName: string) {
+  const templateFramework = await db
+    .selectFrom('competency_frameworks')
+    .selectAll()
+    .where('id', '=', templateId)
+    .where('is_template', '=', true)
+    .executeTakeFirst();
+  if (!templateFramework) throw notFound('Template not found');
 
-    const framework = await db
-      .insertInto('competency_frameworks')
-      .values({ org_id: orgId, name: opts.name, category: template.category, created_by: userId })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+  const templateCourse = await db
+    .selectFrom('courses')
+    .selectAll()
+    .where('framework_id', '=', templateFramework.id)
+    .where('is_template', '=', true)
+    .executeTakeFirst();
+  if (!templateCourse) throw notFound('Template course not found');
 
-    await cloneAreasAndQuestions(template.id, framework.id);
-    return framework;
-  }
-
-  if (!opts.category) throw badRequest('category is required when creating a framework from scratch');
-  return db
+  const framework = await db
     .insertInto('competency_frameworks')
-    .values({ org_id: orgId, name: opts.name, category: opts.category, created_by: userId })
+    .values({ org_id: orgId, name: courseName, category: templateFramework.category, created_by: userId })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  const course = await db
+    .insertInto('courses')
+    .values({ org_id: orgId, framework_id: framework.id, name: courseName, category: templateFramework.category })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  await cloneAreasAndQuestions(templateCourse.id, course.id);
+  return course;
+}
+
+// "Add another course to an existing (org-owned) framework" — no cloning,
+// starts with zero areas since a framework's courses each own their content
+// independently (the agreed trade-off: no sharing areas across courses).
+export async function createCourseUnderExistingFramework(orgId: string, frameworkId: string, courseName: string) {
+  const framework = await assertFrameworkOwnership(orgId, frameworkId);
+  return db
+    .insertInto('courses')
+    .values({ org_id: orgId, framework_id: framework.id, name: courseName, category: framework.category })
     .returningAll()
     .executeTakeFirstOrThrow();
 }
 
-export async function cloneFramework(orgId: string, userId: string, frameworkId: string, newName?: string) {
-  const source = await assertFrameworkOwnership(orgId, frameworkId);
-  const cloned = await db
+// "Start from scratch" — a brand-new framework (this course is its first)
+// plus a brand-new, empty course.
+export async function createCourseFromScratch(orgId: string, userId: string, courseName: string, category: string) {
+  if (!category) throw badRequest('category is required when starting from scratch');
+  const framework = await db
     .insertInto('competency_frameworks')
-    .values({
-      org_id: orgId,
-      name: newName ?? `${source.name} (copy)`,
-      category: source.category,
-      version: source.version + 1,
-      created_by: userId,
-    })
+    .values({ org_id: orgId, name: courseName, category, created_by: userId })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  return db
+    .insertInto('courses')
+    .values({ org_id: orgId, framework_id: framework.id, name: courseName, category })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
+// "Clone to make changes" flow for a locked course (FR-M1-05) — stays under
+// the same framework, since it's still fundamentally the same program, just
+// a fresh unlocked copy of its content ready for new cohorts.
+export async function cloneCourse(orgId: string, courseId: string, newName?: string) {
+  const source = await assertCourseOwnership(orgId, courseId);
+  const cloned = await db
+    .insertInto('courses')
+    .values({ org_id: orgId, framework_id: source.framework_id, name: newName ?? `${source.name} (copy)`, category: source.category })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -169,48 +240,38 @@ export async function cloneFramework(orgId: string, userId: string, frameworkId:
   return cloned;
 }
 
-export async function updateFrameworkName(orgId: string, frameworkId: string, name: string) {
-  await assertFrameworkOwnership(orgId, frameworkId);
-  return db.updateTable('competency_frameworks').set({ name }).where('id', '=', frameworkId).returningAll().executeTakeFirstOrThrow();
-}
-
-export async function addArea(orgId: string, frameworkId: string, opts: { name: string; description?: string }) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
+export async function addArea(orgId: string, courseId: string, opts: { name: string; description?: string }) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
 
   const maxOrder = await db
     .selectFrom('competency_areas')
     .select(({ fn }) => fn.max('display_order').as('max_order'))
-    .where('framework_id', '=', frameworkId)
+    .where('course_id', '=', courseId)
     .executeTakeFirst();
 
   return db
     .insertInto('competency_areas')
-    .values({ framework_id: frameworkId, name: opts.name, description: opts.description ?? null, display_order: (maxOrder?.max_order ?? -1) + 1 })
+    .values({ course_id: courseId, name: opts.name, description: opts.description ?? null, display_order: (maxOrder?.max_order ?? -1) + 1 })
     .returningAll()
     .executeTakeFirstOrThrow();
 }
 
-async function assertAreaOwnership(frameworkId: string, areaId: string) {
+async function assertAreaOwnership(courseId: string, areaId: string) {
   const area = await db
     .selectFrom('competency_areas')
     .selectAll()
     .where('id', '=', areaId)
-    .where('framework_id', '=', frameworkId)
+    .where('course_id', '=', courseId)
     .executeTakeFirst();
   if (!area) throw notFound('Competency area not found');
   return area;
 }
 
-export async function updateArea(
-  orgId: string,
-  frameworkId: string,
-  areaId: string,
-  opts: { name?: string; display_order?: number },
-) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
-  await assertAreaOwnership(frameworkId, areaId);
+export async function updateArea(orgId: string, courseId: string, areaId: string, opts: { name?: string; display_order?: number }) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
+  await assertAreaOwnership(courseId, areaId);
 
   return db
     .updateTable('competency_areas')
@@ -220,16 +281,16 @@ export async function updateArea(
     .executeTakeFirstOrThrow();
 }
 
-export async function deactivateArea(orgId: string, frameworkId: string, areaId: string) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
-  await assertAreaOwnership(frameworkId, areaId);
+export async function deactivateArea(orgId: string, courseId: string, areaId: string) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
+  await assertAreaOwnership(courseId, areaId);
 
   // US-02: minimum 1 active competency area enforced.
   const activeAreas = await db
     .selectFrom('competency_areas')
     .select(['id'])
-    .where('framework_id', '=', frameworkId)
+    .where('course_id', '=', courseId)
     .where('is_active', '=', true)
     .execute();
   if (activeAreas.length <= 1 && activeAreas.some((a) => a.id === areaId)) {
@@ -244,7 +305,7 @@ export type QuestionAssessmentType = 'pre' | 'post' | 'both';
 
 export async function createQuestion(
   orgId: string,
-  frameworkId: string,
+  courseId: string,
   areaId: string,
   opts: {
     question_text: string;
@@ -256,9 +317,9 @@ export async function createQuestion(
     assessment_type?: QuestionAssessmentType;
   },
 ) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
-  await assertAreaOwnership(frameworkId, areaId);
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
+  await assertAreaOwnership(courseId, areaId);
 
   return db
     .insertInto('questions')
@@ -346,10 +407,10 @@ function parseQuestionsCsv(csvText: string): { questions: ParsedQuestion[]; erro
   return { questions, errors };
 }
 
-export async function bulkCreateQuestions(orgId: string, frameworkId: string, areaId: string, csvText: string) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
-  await assertAreaOwnership(frameworkId, areaId);
+export async function bulkCreateQuestions(orgId: string, courseId: string, areaId: string, csvText: string) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
+  await assertAreaOwnership(courseId, areaId);
 
   const { questions, errors } = parseQuestionsCsv(csvText);
   if (errors.length > 0) throw badRequest('CSV validation failed — nothing was imported', { errors });
@@ -365,11 +426,11 @@ export async function bulkCreateQuestions(orgId: string, frameworkId: string, ar
 
 // Replaces the old is_active-only toggle with a general partial update —
 // same immutable-once-locked rule (FR-M1-05) applies to every field here,
-// not just is_active, since a locked framework's questions must match
-// whatever a learner already answered against.
+// not just is_active, since a locked course's questions must match whatever
+// a learner already answered against.
 export async function updateQuestion(
   orgId: string,
-  frameworkId: string,
+  courseId: string,
   questionId: string,
   opts: {
     question_text?: string;
@@ -382,15 +443,15 @@ export async function updateQuestion(
     is_active?: boolean;
   },
 ) {
-  const framework = await assertFrameworkOwnership(orgId, frameworkId);
-  await assertNotLocked(framework);
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
 
   const question = await db
     .selectFrom('questions')
     .innerJoin('competency_areas', 'competency_areas.id', 'questions.area_id')
     .selectAll('questions')
     .where('questions.id', '=', questionId)
-    .where('competency_areas.framework_id', '=', frameworkId)
+    .where('competency_areas.course_id', '=', courseId)
     .executeTakeFirst();
   if (!question) throw notFound('Question not found');
 
@@ -417,11 +478,4 @@ export async function updateQuestion(
     .executeTakeFirstOrThrow();
 
   return { warning: Number(activeCount.count) < 8 };
-}
-
-// Called internally when a cohort's first pre-assessment session starts (S3) —
-// not exposed as an admin-facing HTTP route since nothing but that internal
-// trigger should ever call it (spec marks it Auth: System).
-export async function lockFrameworkIfNeeded(frameworkId: string) {
-  await db.updateTable('competency_frameworks').set({ is_locked: true }).where('id', '=', frameworkId).where('is_locked', '=', false).execute();
 }

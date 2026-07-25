@@ -72,7 +72,7 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
       'cohorts.name as cohort_name',
       'cohorts.start_date',
       'cohorts.end_date',
-      'cohorts.framework_id',
+      'cohorts.course_id',
       'cohorts.pass_threshold',
       'courses.name as course_name',
       'organisations.id as org_id',
@@ -95,7 +95,7 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
   const [gains, effectSize, competencyBreakdown, passRate, byGender, byLocation, byAgeGroup, confidence, satisfaction] = await Promise.all([
     analyticsService.getMeanGain(cohortId),
     analyticsService.getCohensD(cohortId),
-    analyticsService.getCompetencyBreakdown(cohortId, cohort.framework_id),
+    analyticsService.getCompetencyBreakdown(cohortId, cohort.course_id),
     analyticsService.getPassRate(cohortId, passThreshold),
     equitySide(cohortId, 'gender'),
     equitySide(cohortId, 'location_type'),

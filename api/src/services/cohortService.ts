@@ -2,9 +2,25 @@ import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { assignTierForNewCohort, checkCapacity } from './pricingService.js';
+import * as frameworkService from './frameworkService.js';
 
-export async function createCourse(orgId: string, opts: { name: string; category: string }) {
-  return db.insertInto('courses').values({ org_id: orgId, name: opts.name, category: opts.category }).returningAll().executeTakeFirstOrThrow();
+// Three ways to create a course, matching the Framework -> Course hierarchy
+// (docs/org-onboarding-spec.md's framework/course restructure): pick a
+// template (clones a framework + its one course together), attach a new
+// course to an existing org framework, or start both fresh from scratch.
+export async function createCourse(
+  orgId: string,
+  userId: string,
+  opts: { name: string; category?: string; templateId?: string; frameworkId?: string },
+) {
+  if (opts.templateId) {
+    return frameworkService.cloneTemplateForNewCourse(orgId, userId, opts.templateId, opts.name);
+  }
+  if (opts.frameworkId) {
+    return frameworkService.createCourseUnderExistingFramework(orgId, opts.frameworkId, opts.name);
+  }
+  if (!opts.category) throw badRequest('category is required when starting a course from scratch');
+  return frameworkService.createCourseFromScratch(orgId, userId, opts.name, opts.category);
 }
 
 export async function listCourses(orgId: string) {
@@ -17,20 +33,8 @@ export async function listCourses(orgId: string) {
     .execute();
 }
 
-async function assertCourseOwnership(orgId: string, courseId: string) {
-  const course = await db
-    .selectFrom('courses')
-    .selectAll()
-    .where('id', '=', courseId)
-    .where('org_id', '=', orgId)
-    .where('deleted_at', 'is', null)
-    .executeTakeFirst();
-  if (!course) throw notFound('Course not found');
-  return course;
-}
-
 export async function getCourse(orgId: string, courseId: string) {
-  return assertCourseOwnership(orgId, courseId);
+  return frameworkService.assertCourseOwnership(orgId, courseId);
 }
 
 export async function createCohort(
@@ -39,23 +43,13 @@ export async function createCohort(
   courseId: string,
   opts: {
     name: string;
-    framework_id: string;
     start_date?: string;
     end_date?: string;
     pass_threshold?: number;
     projected_student_count?: number;
   },
 ) {
-  await assertCourseOwnership(orgId, courseId);
-
-  const framework = await db
-    .selectFrom('competency_frameworks')
-    .selectAll()
-    .where('id', '=', opts.framework_id)
-    .where('org_id', '=', orgId)
-    .where('deleted_at', 'is', null)
-    .executeTakeFirst();
-  if (!framework) throw badRequest('framework_id does not reference a framework owned by this org');
+  await frameworkService.assertCourseOwnership(orgId, courseId);
 
   // Ordinal per org (docs/org-onboarding-spec.md §4.4) — drives free-trial
   // eligibility indirectly via has_used_free_trial, not read directly here.
@@ -71,7 +65,6 @@ export async function createCohort(
     .insertInto('cohorts')
     .values({
       course_id: courseId,
-      framework_id: opts.framework_id,
       name: opts.name,
       start_date: opts.start_date ? new Date(opts.start_date) : null,
       end_date: opts.end_date ? new Date(opts.end_date) : null,
@@ -102,7 +95,7 @@ export async function createCohort(
 }
 
 export async function listCohorts(orgId: string, courseId: string) {
-  await assertCourseOwnership(orgId, courseId);
+  await frameworkService.assertCourseOwnership(orgId, courseId);
   return db
     .selectFrom('cohorts')
     .selectAll()

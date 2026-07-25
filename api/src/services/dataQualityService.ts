@@ -10,7 +10,7 @@ const INCOMPLETE_THRESHOLD = 0.8;
 // still returns a score summary to the learner either way (US-09 requires an
 // immediate summary regardless of any quality flag — the flag only affects
 // whether the session counts toward cohort-level analytics).
-export async function evaluateSubmission(sessionId: string, frameworkId: string, sessionType: 'pre' | 'post', durationSecs: number) {
+export async function evaluateSubmission(sessionId: string, courseId: string, sessionType: 'pre' | 'post', durationSecs: number) {
   if (durationSecs < GAMING_THRESHOLD_SECS) {
     return { flagReason: 'gaming' as const, status: 'completed' as const };
   }
@@ -20,7 +20,7 @@ export async function evaluateSubmission(sessionId: string, frameworkId: string,
       .selectFrom('questions')
       .innerJoin('competency_areas', 'competency_areas.id', 'questions.area_id')
       .select(({ fn }) => fn.countAll().as('count'))
-      .where('competency_areas.framework_id', '=', frameworkId)
+      .where('competency_areas.course_id', '=', courseId)
       .where('competency_areas.is_active', '=', true)
       .where('questions.is_active', '=', true)
       .where((eb) => eb.or([eb('questions.assessment_type', '=', sessionType), eb('questions.assessment_type', '=', 'both')]))

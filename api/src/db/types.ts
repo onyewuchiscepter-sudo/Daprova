@@ -64,8 +64,11 @@ export interface RefreshTokensTable {
 export interface CoursesTable {
   id: Generated<string>;
   org_id: string;
+  framework_id: string;
   name: string;
   category: string;
+  is_locked: Generated<boolean>;
+  is_template: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
 }
@@ -77,7 +80,6 @@ export interface CompetencyFrameworksTable {
   category: string;
   version: Generated<number>;
   is_template: Generated<boolean>;
-  is_locked: Generated<boolean>;
   created_by: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -85,7 +87,7 @@ export interface CompetencyFrameworksTable {
 
 export interface CompetencyAreasTable {
   id: Generated<string>;
-  framework_id: string;
+  course_id: string;
   name: string;
   description: string | null;
   display_order: Generated<number>;
@@ -110,7 +112,6 @@ export interface QuestionsTable {
 export interface CohortsTable {
   id: Generated<string>;
   course_id: string;
-  framework_id: string;
   name: string;
   start_date: Timestamp | null;
   end_date: Timestamp | null;

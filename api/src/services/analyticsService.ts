@@ -77,7 +77,7 @@ export async function getPassRate(cohortId: string, passThreshold: number, filte
 
 // B4.1 — competency-level pre/post breakdown across the whole cohort
 // (distinct from assessmentService's per-learner breakdown).
-export async function getCompetencyBreakdown(cohortId: string, frameworkId: string, filters?: DemographicFilters) {
+export async function getCompetencyBreakdown(cohortId: string, courseId: string, filters?: DemographicFilters) {
   let perLearnerArea = db
     .selectFrom('question_responses as qr')
     .innerJoin('assessment_sessions as s', 's.id', 'qr.session_id')
@@ -103,7 +103,7 @@ export async function getCompetencyBreakdown(cohortId: string, frameworkId: stri
       sql<string>`round(avg(case when qr_agg.session_type = 'pre' then (qr_agg.correct::float / qr_agg.total) * 100 end)::numeric, 2)`.as('pre_pct'),
       sql<string>`round(avg(case when qr_agg.session_type = 'post' then (qr_agg.correct::float / qr_agg.total) * 100 end)::numeric, 2)`.as('post_pct'),
     ])
-    .where('ca.framework_id', '=', frameworkId)
+    .where('ca.course_id', '=', courseId)
     .groupBy(['ca.id', 'ca.name', 'ca.display_order'])
     .orderBy('ca.display_order')
     .execute();

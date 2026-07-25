@@ -1,11 +1,13 @@
 import { db } from '../index.js';
 import { TEMPLATES } from './templateData.js';
 
-// Templates are stored as ordinary competency_frameworks rows (is_template=true),
-// owned by a hidden "system templates" organisation rather than any real
-// customer org, so POST /frameworks can clone them the same way it would clone
-// any other framework. is_locked=true on templates themselves — they're the
-// master copies, never edited directly, only cloned into a real org.
+// Templates are stored as an ordinary competency_frameworks row
+// (is_template=true) holding exactly one ordinary courses row
+// (is_template=true), owned by a hidden "system templates" organisation
+// rather than any real customer org — picking a template clones both
+// together (frameworkService.cloneTemplateForNewCourse). is_locked=true on
+// the template course — it's the master copy, never edited directly, only
+// cloned into a real org's own course.
 const SYSTEM_ORG = { name: 'Daprova System Templates', slug: 'system-templates', contact_email: 'templates@daprova.internal' };
 
 export async function seedFrameworkTemplates() {
@@ -31,14 +33,20 @@ export async function seedFrameworkTemplates() {
 
     const framework = await db
       .insertInto('competency_frameworks')
-      .values({ org_id: systemOrg.id, name: template.name, category: template.category, is_template: true, is_locked: true })
+      .values({ org_id: systemOrg.id, name: template.name, category: template.category, is_template: true })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    const templateCourse = await db
+      .insertInto('courses')
+      .values({ org_id: systemOrg.id, framework_id: framework.id, name: template.name, category: template.category, is_template: true, is_locked: true })
       .returningAll()
       .executeTakeFirstOrThrow();
 
     for (const [areaIndex, area] of template.areas.entries()) {
       const areaRow = await db
         .insertInto('competency_areas')
-        .values({ framework_id: framework.id, name: area.name, display_order: areaIndex })
+        .values({ course_id: templateCourse.id, name: area.name, display_order: areaIndex })
         .returningAll()
         .executeTakeFirstOrThrow();
 

@@ -39,13 +39,12 @@ export type CompetencyFramework = {
   category: CompetencyCategory;
   version: number;
   is_template: boolean;
-  is_locked: boolean;
   created_at: string;
 };
 
 export type CompetencyArea = {
   id: string;
-  framework_id: string;
+  course_id: string;
   name: string;
   description: string | null;
   display_order: number;
@@ -68,8 +67,11 @@ export type Question = {
 export type Course = {
   id: string;
   org_id: string;
+  framework_id: string;
   name: string;
   category: CompetencyCategory;
+  is_locked: boolean;
+  is_template: boolean;
   created_at: string;
 };
 
@@ -78,7 +80,6 @@ export type CohortStatus = 'setup' | 'active' | 'graduated' | 'closed';
 export type Cohort = {
   id: string;
   course_id: string;
-  framework_id: string;
   name: string;
   start_date: string | null;
   end_date: string | null;

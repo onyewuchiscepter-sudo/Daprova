@@ -47,20 +47,32 @@ async function main() {
     .where('category', '=', 'digital_skills')
     .where('is_template', '=', true)
     .executeTakeFirstOrThrow();
+  const templateCourse = await db
+    .selectFrom('courses')
+    .selectAll()
+    .where('framework_id', '=', template.id)
+    .where('is_template', '=', true)
+    .executeTakeFirstOrThrow();
 
-  console.log('[synthetic] cloning a fresh framework from the Digital Skills template...');
+  console.log('[synthetic] cloning a fresh framework + course from the Digital Skills template...');
   const framework = await db
     .insertInto('competency_frameworks')
     .values({ org_id: org.id, name: 'Synthetic Validation Framework', category: template.category, created_by: adminMembership.person_id })
     .returningAll()
     .executeTakeFirstOrThrow();
 
-  const templateAreas = await db.selectFrom('competency_areas').selectAll().where('framework_id', '=', template.id).execute();
+  const course = await db
+    .insertInto('courses')
+    .values({ org_id: org.id, framework_id: framework.id, name: 'Synthetic Validation Bootcamp', category: 'digital_skills' })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  const templateAreas = await db.selectFrom('competency_areas').selectAll().where('course_id', '=', templateCourse.id).execute();
   const areaIdMap = new Map<string, string>();
   for (const area of templateAreas) {
     const newArea = await db
       .insertInto('competency_areas')
-      .values({ framework_id: framework.id, name: area.name, description: area.description, display_order: area.display_order, is_active: area.is_active })
+      .values({ course_id: course.id, name: area.name, description: area.description, display_order: area.display_order, is_active: area.is_active })
       .returningAll()
       .executeTakeFirstOrThrow();
     areaIdMap.set(area.id, newArea.id);
@@ -86,17 +98,10 @@ async function main() {
     }
   }
 
-  const course = await db
-    .insertInto('courses')
-    .values({ org_id: org.id, name: 'Synthetic Validation Bootcamp', category: 'digital_skills' })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
   const cohort = await db
     .insertInto('cohorts')
     .values({
       course_id: course.id,
-      framework_id: framework.id,
       name: `Synthetic Cohort (n=${N_LEARNERS})`,
       pre_link_token: crypto.randomUUID(),
       post_link_token: crypto.randomUUID(),
@@ -110,7 +115,7 @@ async function main() {
     .selectFrom('questions')
     .innerJoin('competency_areas', 'competency_areas.id', 'questions.area_id')
     .select(['questions.id', 'questions.area_id', 'questions.correct_option', 'questions.assessment_type'])
-    .where('competency_areas.framework_id', '=', framework.id)
+    .where('competency_areas.course_id', '=', course.id)
     .execute();
   const preQuestions = questions.filter((q) => q.assessment_type === 'pre' || q.assessment_type === 'both');
   const postQuestions = questions.filter((q) => q.assessment_type === 'post' || q.assessment_type === 'both');
@@ -212,7 +217,7 @@ async function main() {
   const effectSize = await analyticsService.getCohensD(cohort.id);
   console.log("Cohen's d:", effectSize);
 
-  const breakdown = await analyticsService.getCompetencyBreakdown(cohort.id, framework.id);
+  const breakdown = await analyticsService.getCompetencyBreakdown(cohort.id, course.id);
   console.log('Competency breakdown:', breakdown);
 
   for (const dim of ['gender', 'age_group', 'location_type', 'disability'] as const) {

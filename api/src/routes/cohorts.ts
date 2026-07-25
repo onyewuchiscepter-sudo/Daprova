@@ -108,7 +108,7 @@ cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
     const [gains, effectSize, competencyBreakdown, passRate] = await Promise.all([
       analyticsService.getMeanGain(cohort.id, filters),
       analyticsService.getCohensD(cohort.id, filters),
-      analyticsService.getCompetencyBreakdown(cohort.id, cohort.framework_id, filters),
+      analyticsService.getCompetencyBreakdown(cohort.id, cohort.course_id, filters),
       analyticsService.getPassRate(cohort.id, passThreshold, filters),
     ]);
     res.json({ ...gains, cohens_d: effectSize.cohens_d, pass_threshold: passThreshold, pass_rate: passRate, competency_breakdown: competencyBreakdown });

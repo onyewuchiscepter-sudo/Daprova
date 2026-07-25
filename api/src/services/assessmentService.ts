@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
-import { lockFrameworkIfNeeded } from './frameworkService.js';
+import { lockCourseIfNeeded } from './frameworkService.js';
 import { evaluateSubmission } from './dataQualityService.js';
 import { assertCapacityAvailable } from './pricingService.js';
 
@@ -87,8 +87,8 @@ export async function startSession(
       .executeTakeFirstOrThrow();
   }
 
-  // FR-M1-05: framework becomes immutable once the first assessment session begins.
-  await lockFrameworkIfNeeded(cohort.framework_id);
+  // FR-M1-05: a course's structure becomes immutable once the first assessment session begins.
+  await lockCourseIfNeeded(cohort.course_id);
 
   const questions = await db
     .selectFrom('questions')
@@ -102,7 +102,7 @@ export async function startSession(
       'questions.option_c',
       'questions.option_d',
     ])
-    .where('competency_areas.framework_id', '=', cohort.framework_id)
+    .where('competency_areas.course_id', '=', cohort.course_id)
     .where('competency_areas.is_active', '=', true)
     .where('questions.is_active', '=', true)
     .where((eb) => eb.or([eb('questions.assessment_type', '=', sessionType), eb('questions.assessment_type', '=', 'both')]))
@@ -166,7 +166,7 @@ export async function recordResponses(cohortToken: string, learnerToken: string,
 
 type ConfidenceInput = { area_id: string; rating: number };
 
-async function scoreSummaryFor(learnerId: string, frameworkId: string, resultSessionType: 'pre' | 'post') {
+async function scoreSummaryFor(learnerId: string, courseId: string, resultSessionType: 'pre' | 'post') {
   // This is the learner's own result screen, not a cohort aggregate — a
   // session flagged 'incomplete' still gets shown to the learner who took
   // it (US-09 requires an immediate summary regardless). Cohort-level
@@ -177,7 +177,7 @@ async function scoreSummaryFor(learnerId: string, frameworkId: string, resultSes
     db.selectFrom('assessment_sessions').selectAll().where('learner_id', '=', learnerId).where('session_type', '=', 'post').where('status', 'in', ['completed', 'flagged']).executeTakeFirst(),
   ]);
 
-  const areas = await db.selectFrom('competency_areas').selectAll().where('framework_id', '=', frameworkId).where('is_active', '=', true).orderBy('display_order').execute();
+  const areas = await db.selectFrom('competency_areas').selectAll().where('course_id', '=', courseId).where('is_active', '=', true).orderBy('display_order').execute();
 
   const competencyBreakdown = await Promise.all(
     areas.map(async (area) => {
@@ -218,7 +218,7 @@ export async function submitSession(cohortToken: string, learnerToken: string, c
     // Idempotent per spec B3.1 — duplicate submit calls return the existing
     // result. Checked against "not started" rather than "completed" because
     // an incomplete session is submitted once already too (status='flagged').
-    return scoreSummaryFor(learner.id, cohort.framework_id, session.session_type as 'pre' | 'post');
+    return scoreSummaryFor(learner.id, cohort.course_id, session.session_type as 'pre' | 'post');
   }
 
   const agg = await db
@@ -230,7 +230,7 @@ export async function submitSession(cohortToken: string, learnerToken: string, c
   const totalScore = total > 0 ? Math.round((Number(agg?.correct ?? 0) / total) * 10000) / 100 : 0;
   const durationSecs = Math.round((Date.now() - new Date(session.started_at as unknown as string).getTime()) / 1000);
 
-  const quality = await evaluateSubmission(session.id, cohort.framework_id, session.session_type as 'pre' | 'post', durationSecs);
+  const quality = await evaluateSubmission(session.id, cohort.course_id, session.session_type as 'pre' | 'post', durationSecs);
 
   await db
     .updateTable('assessment_sessions')
@@ -245,7 +245,7 @@ export async function submitSession(cohortToken: string, learnerToken: string, c
       .execute();
   }
 
-  return scoreSummaryFor(learner.id, cohort.framework_id, session.session_type as 'pre' | 'post');
+  return scoreSummaryFor(learner.id, cohort.course_id, session.session_type as 'pre' | 'post');
 }
 
 export async function getResult(cohortToken: string, learnerToken: string) {
@@ -260,7 +260,7 @@ export async function getResult(cohortToken: string, learnerToken: string) {
   const latest = post ?? pre;
   if (!latest) throw notFound('No completed assessment session for this learner');
 
-  return scoreSummaryFor(learner.id, cohort.framework_id, latest.session_type as 'pre' | 'post');
+  return scoreSummaryFor(learner.id, cohort.course_id, latest.session_type as 'pre' | 'post');
 }
 
 type SatisfactionInput = {
