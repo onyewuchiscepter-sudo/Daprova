@@ -1,0 +1,560 @@
+/* Daprova landing page.
+   Visual thesis: in M&E, "baseline" is the foundational term — every result is
+   read as distance risen above where a cohort started. So the page's spine is a
+   literal baseline hairline, and the hero is the product's own output (gain
+   bars rising off that line) rather than a headline-and-buttons block.
+   Everything is namespaced under .dp- so it can't leak into the Tailwind app. */
+
+.dp-root {
+  --ink: #12212e;
+  --ink-soft: #4a5a63;
+  --ground: #f1f4f2;
+  --paper: #ffffff;
+  --gain: #0e7c5a;
+  --gain-deep: #0a5d43;
+  --baseline: #93a5a0;
+  --rule: #d7ded9;
+  --amber: #b8801f;
+
+  --display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
+  --body: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dp-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* Every number on the page is tabular mono — this is an instrument, and
+   digits that shift width undercut that. */
+.dp-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--baseline);
+}
+
+/* ---------- header ---------- */
+
+.dp-header {
+  border-bottom: 1px solid var(--rule);
+  background: var(--ground);
+}
+.dp-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0;
+}
+.dp-mark {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.dp-mark span {
+  color: var(--gain);
+}
+.dp-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.dp-link {
+  font-size: 14px;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.dp-link:hover {
+  color: var(--ink);
+}
+
+.dp-btn {
+  display: inline-block;
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 11px 20px;
+  border-radius: 2px;
+  background: var(--gain);
+  color: #fff;
+  border: 1px solid var(--gain);
+  transition: background 0.15s ease;
+}
+.dp-btn:hover {
+  background: var(--gain-deep);
+  border-color: var(--gain-deep);
+}
+.dp-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+.dp-btn-ghost:hover {
+  background: transparent;
+  border-color: var(--ink);
+}
+.dp-btn-lg {
+  padding: 14px 26px;
+  font-size: 15px;
+}
+
+.dp-root a:focus-visible,
+.dp-root button:focus-visible {
+  outline: 2px solid var(--gain);
+  outline-offset: 3px;
+}
+
+/* ---------- hero ---------- */
+
+.dp-hero {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 64px;
+  align-items: center;
+  padding: 84px 0 76px;
+}
+
+.dp-h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(40px, 5.2vw, 62px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin: 18px 0 0;
+}
+.dp-h1 em {
+  font-style: normal;
+  color: var(--gain);
+}
+
+.dp-lede {
+  margin: 22px 0 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 44ch;
+}
+
+.dp-cta-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 30px;
+  flex-wrap: wrap;
+}
+
+/* ---------- the gain plot (signature element) ---------- */
+
+.dp-plot {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 26px 28px 0;
+}
+
+.dp-plot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 22px;
+}
+.dp-plot-title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  display: block;
+}
+.dp-plot-n {
+  display: block;
+  margin-top: 5px;
+}
+
+/* Marks the plot as illustrative. Deliberately legible rather than a
+   footnote — a visitor should not be able to mistake it for a client result. */
+.dp-tag {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--baseline);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.dp-bars {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  align-items: end;
+  height: 210px;
+}
+
+.dp-bar-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  position: relative;
+}
+
+/* The delta is the point of the whole product, so it's what floats free at
+   the top — not the absolute score. */
+.dp-delta {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gain);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.dp-bar {
+  position: relative;
+  width: 100%;
+  border-radius: 1px 1px 0 0;
+  background: linear-gradient(180deg, var(--gain) 0%, var(--gain-deep) 100%);
+  transform-origin: bottom;
+  animation: dp-rise 900ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* The pre-score portion, rendered as the muted "where you started" band. */
+.dp-bar-pre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--baseline);
+  opacity: 0.34;
+}
+
+@keyframes dp-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* The baseline rule the bars stand on — the page's central metaphor. */
+.dp-baseline {
+  height: 1px;
+  background: var(--ink);
+  margin-top: 0;
+}
+
+.dp-plot-labels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  padding: 10px 0 22px;
+}
+.dp-plot-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.dp-plot-foot {
+  border-top: 1px solid var(--rule);
+  margin: 0 -28px;
+  padding: 14px 28px;
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+.dp-stat-k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--baseline);
+  display: block;
+}
+.dp-stat-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ---------- stakes strip ---------- */
+
+.dp-stakes {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  background: var(--ink);
+  color: var(--ground);
+}
+.dp-stakes-inner {
+  padding: 54px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+.dp-stakes h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(24px, 2.8vw, 32px);
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.dp-stakes p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.65;
+  color: #a8b8b4;
+}
+
+/* ---------- sections ---------- */
+
+.dp-section {
+  padding: 78px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.dp-section-head {
+  max-width: 60ch;
+  margin-bottom: 42px;
+}
+.dp-h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(26px, 3vw, 34px);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 10px 0 0;
+}
+.dp-sub {
+  margin: 14px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ---------- capability panels ---------- */
+
+.dp-panels {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dp-panel {
+  background: var(--paper);
+  padding: 30px 28px;
+}
+.dp-panel h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  margin: 12px 0 8px;
+}
+.dp-panel p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--ink-soft);
+}
+.dp-panel-amber .dp-eyebrow {
+  color: var(--amber);
+}
+
+/* ---------- equity bars ---------- */
+
+.dp-equity {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 60px;
+  align-items: center;
+}
+.dp-eq-rows {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 8px 26px 22px;
+}
+.dp-eq-row {
+  padding: 15px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.dp-eq-row:last-child {
+  border-bottom: none;
+}
+.dp-eq-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.dp-eq-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+.dp-eq-n {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--baseline);
+}
+.dp-eq-track {
+  height: 7px;
+  background: var(--ground);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.dp-eq-fill {
+  height: 100%;
+  background: var(--gain);
+  border-radius: 1px;
+}
+.dp-eq-gain {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gain);
+}
+
+/* ---------- steps ---------- */
+
+.dp-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 34px;
+}
+.dp-step {
+  border-top: 2px solid var(--ink);
+  padding-top: 18px;
+}
+.dp-step-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--gain);
+}
+.dp-step h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  margin: 10px 0 8px;
+}
+.dp-step p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--ink-soft);
+}
+
+/* ---------- closing ---------- */
+
+.dp-close {
+  padding: 88px 0;
+  text-align: center;
+}
+.dp-close .dp-h2 {
+  margin-bottom: 0;
+}
+.dp-close .dp-sub {
+  margin: 16px auto 30px;
+  max-width: 48ch;
+}
+
+.dp-footer {
+  border-top: 1px solid var(--rule);
+  padding: 26px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--baseline);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .dp-hero {
+    grid-template-columns: 1fr;
+    gap: 44px;
+    padding: 56px 0;
+  }
+  .dp-stakes-inner,
+  .dp-equity {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .dp-panels,
+  .dp-steps {
+    grid-template-columns: 1fr;
+  }
+  .dp-section {
+    padding: 56px 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .dp-wrap {
+    padding: 0 20px;
+  }
+  .dp-bars,
+  .dp-plot-labels {
+    gap: 7px;
+  }
+  .dp-plot {
+    padding: 20px 18px 0;
+  }
+  .dp-plot-foot {
+    margin: 0 -18px;
+    padding: 14px 18px;
+    gap: 18px;
+  }
+  .dp-plot-label {
+    font-size: 10px;
+    letter-spacing: -0.01em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-bar {
+    animation: none;
+  }
+}
