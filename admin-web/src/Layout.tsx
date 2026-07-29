@@ -1,6 +1,15 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 
+const NAV = [
+  { to: '/courses', label: 'Courses' },
+  { to: '/frameworks', label: 'Frameworks' },
+  { to: '/team', label: 'Team' },
+];
+
+// The app shell is deliberately quieter than the landing page: same palette
+// and type, but jade appears only on the active nav item and primary actions.
+// These screens get looked at daily, and personality wears thin fast.
 export default function Layout() {
   const { user, org, memberships, switchOrg, signOut, impersonation, endImpersonation } = useAuth();
   const navigate = useNavigate();
@@ -21,14 +30,15 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-ground">
       {/* docs/org-onboarding-spec.md §7.3 point 4 — persistent, unmissable,
           and visibly different by mode so there's never ambiguity about
-          which capability level is active. */}
+          which capability level is active. This is the one place loud colour
+          is correct: the cost of not noticing it is high. */}
       {impersonation && (
         <div
-          className={`px-6 py-2 text-sm font-medium flex items-center justify-between ${
-            impersonation.mode === 'write' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
+          className={`px-6 py-2 text-sm font-medium flex items-center justify-between gap-4 ${
+            impersonation.mode === 'write' ? 'bg-flag text-white' : 'bg-amber text-white'
           }`}
         >
           <span>
@@ -36,61 +46,81 @@ export default function Layout() {
               ? `Acting as ${impersonation.orgName} / ${impersonation.targetEmail} — every action is logged`
               : `Viewing as ${impersonation.orgName} / ${impersonation.targetEmail} (read-only)`}
           </span>
-          <button onClick={handleEndImpersonation} className="underline">
+          <button onClick={handleEndImpersonation} className="underline shrink-0 hover:no-underline">
             End impersonation
           </button>
         </div>
       )}
+
       {/* Self-serve signups start 'pending' until a platform admin reviews
           the registration — the org can still use the product (frameworks,
           courses, cohorts) in the meantime, so this is informational, not a
           blocker. Team-management routes enforce the actual restriction
           server-side (middleware/orgVerification.ts). */}
       {org?.verification_status === 'pending' && (
-        <div className="bg-amber-100 text-amber-900 px-6 py-2 text-sm text-center">
-          Your organisation is awaiting verification. You can keep building frameworks and courses, but inviting or managing
-          team members is unavailable until a Daprova admin reviews your registration.
+        <div className="bg-amber-wash text-amber border-b border-amber/20 px-6 py-2 text-sm text-center">
+          Your organisation is awaiting verification. You can keep building courses and frameworks — inviting or managing team
+          members opens once a Daprova admin reviews your registration.
         </div>
       )}
-      <header className="bg-white border-b px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-slate-900">Daprova Admin</span>
-          <Link to="/courses" className="text-sm text-slate-600 hover:text-slate-900">
-            Courses
-          </Link>
-          <Link to="/frameworks" className="text-sm text-slate-600 hover:text-slate-900">
-            Frameworks
-          </Link>
-          <Link to="/team" className="text-sm text-slate-600 hover:text-slate-900">
-            Team
-          </Link>
-        </div>
-        <div className="flex items-center gap-4 text-sm text-slate-600">
-          {memberships.length > 1 ? (
-            <select
-              value={org?.id ?? ''}
-              onChange={handleSwitchOrg}
-              className="border rounded px-2 py-1 text-sm text-slate-700 bg-white"
-              aria-label="Switch organisation"
-            >
-              {memberships.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
+
+      <header className="bg-paper border-b border-rule">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-7 min-w-0">
+            <span className="font-mono font-semibold text-[15px] tracking-[0.02em] text-ink shrink-0">
+              daprova<span className="text-gain">.</span>
+            </span>
+            <nav className="flex items-center gap-6">
+              {NAV.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `text-sm transition-colors ${isActive ? 'text-ink font-medium' : 'text-ink-soft hover:text-ink'}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <span className="relative block py-[18px]">
+                      {item.label}
+                      {isActive && <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-gain" />}
+                    </span>
+                  )}
+                </NavLink>
               ))}
-            </select>
-          ) : (
-            <span>{org?.name}</span>
-          )}
-          <span>
-            {user?.email} ({user?.role})
-          </span>
-          <button onClick={handleSignOut} className="text-slate-500 hover:text-slate-900 underline">
-            Sign out
-          </button>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-4 text-sm min-w-0">
+            {memberships.length > 1 ? (
+              <select
+                value={org?.id ?? ''}
+                onChange={handleSwitchOrg}
+                className="border border-rule rounded px-2 py-1 text-sm text-ink bg-paper focus:border-gain focus:outline-none"
+                aria-label="Switch organisation"
+              >
+                {memberships.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-ink truncate">{org?.name}</span>
+            )}
+            <span className="text-ink-soft truncate hidden sm:inline" title={user?.email}>
+              {user?.email}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-sage border border-rule rounded px-1.5 py-0.5 shrink-0">
+              {user?.role}
+            </span>
+            <button onClick={handleSignOut} className="text-ink-soft hover:text-ink underline shrink-0">
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
-      <main className="max-w-5xl mx-auto p-6">
+
+      <main className="max-w-6xl mx-auto px-6 py-8">
         <Outlet />
       </main>
     </div>

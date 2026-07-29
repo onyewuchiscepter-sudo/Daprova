@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { Badge, Banner, EmptyState, LinkButton, PageHeader } from '../components/ui';
 
-type Course = { id: string; name: string; category: string; created_at: string };
+type Course = { id: string; name: string; category: string; is_locked: boolean; created_at: string };
 
 export default function CoursesListPage() {
   const { data, isLoading, error } = useQuery<Course[]>({
@@ -12,25 +13,33 @@ export default function CoursesListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-slate-900">Courses</h1>
-        <Link to="/courses/new" className="bg-slate-900 text-white text-sm rounded px-4 py-2">
-          + New Course
-        </Link>
-      </div>
+      <PageHeader
+        title="Courses"
+        sub="Each course holds its own competency areas, questions, and cohorts."
+        actions={<LinkButton to="/courses/new">New course</LinkButton>}
+      />
 
-      {isLoading && <p className="text-slate-500">Loading…</p>}
-      {error && <p className="text-red-600">{(error as Error).message}</p>}
+      {isLoading && <p className="text-sm text-ink-soft">Loading…</p>}
+      {error && <Banner tone="flag">{(error as Error).message}</Banner>}
+
       {data && data.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-slate-500">No courses yet.</div>
+        <EmptyState action={<LinkButton to="/courses/new">Create your first course</LinkButton>}>
+          No courses yet. Start from a template or build one from scratch.
+        </EmptyState>
       )}
 
       <ul className="space-y-2">
         {data?.map((c) => (
           <li key={c.id}>
-            <Link to={`/courses/${c.id}`} className="block bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
-              <p className="font-medium text-slate-900">{c.name}</p>
-              <p className="text-xs text-slate-500">{c.category}</p>
+            <Link
+              to={`/courses/${c.id}`}
+              className="flex items-center justify-between gap-4 bg-paper border border-rule rounded-lg px-4 py-3.5 hover:border-ink transition-colors"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-ink truncate">{c.name}</p>
+                <p className="font-mono text-[11px] text-sage mt-0.5">{c.category}</p>
+              </div>
+              {c.is_locked && <Badge tone="amber">Locked</Badge>}
             </Link>
           </li>
         ))}

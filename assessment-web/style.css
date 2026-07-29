@@ -1,106 +1,266 @@
-* { box-sizing: border-box; }
+/* Daprova learner assessment.
+   Shares admin-web's palette, but deliberately NOT its webfonts: this page is
+   loaded on mobile data, often on 3G, and pulling ~170KB of IBM Plex before
+   text can render would undo the reason it's a few kilobytes in the first
+   place. System stack instead — the colour and layout carry the identity. */
+
+:root {
+  --ink: #12212e;
+  --ink-soft: #4a5a63;
+  --ground: #f1f4f2;
+  --paper: #ffffff;
+  --gain: #0e7c5a;
+  --gain-deep: #0a5d43;
+  --gain-wash: #e6f1ec;
+  --sage: #5f736d;
+  --rule: #d7ded9;
+  --amber: #946515;
+  --amber-wash: #fbf3e3;
+  --flag: #b4463a;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f8fafc;
-  color: #1e293b;
+  background: var(--ground);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
 }
+
 #app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding: 28px 16px 56px;
   min-height: 100vh;
 }
-h1 { font-size: 1.25rem; margin: 0 0 4px; }
-p.subtitle { color: #64748b; font-size: 0.9rem; margin: 0 0 20px; }
+
+h1 {
+  font-size: 1.3rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
+}
+
+p.subtitle {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0 0 22px;
+}
+
 .card {
-  background: #fff;
-  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.field { margin-bottom: 16px; }
-label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
-select, input[type="text"] {
+
+.field {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 7px;
+}
+
+select,
+input[type='text'],
+textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  padding: 11px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
   font-size: 1rem;
+  font-family: inherit;
+  background: var(--paper);
+  color: var(--ink);
 }
+
+select:focus,
+input[type='text']:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--gain);
+}
+
+textarea {
+  resize: vertical;
+}
+
 .btn {
   display: block;
   width: 100%;
-  padding: 12px;
-  background: #0f172a;
+  padding: 13px;
+  background: var(--gain);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 2px;
   font-size: 1rem;
   font-weight: 600;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.progress { font-size: 0.8rem; color: #64748b; margin-bottom: 10px; }
-.option {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 12px 14px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 0.95rem;
-  margin-bottom: 8px;
-  cursor: pointer;
-}
-.option.selected { border-color: #0f172a; background: #f1f5f9; }
-.question-text { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; }
-.rating-row { display: flex; gap: 8px; margin: 16px 0; }
-.rating-row button {
-  flex: 1;
-  padding: 12px 0;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 1rem;
-  cursor: pointer;
-}
-.rating-row button.selected { border-color: #0f172a; background: #0f172a; color: #fff; }
-.nps-row { flex-wrap: wrap; }
-.nps-row button { flex: 1 1 14%; padding: 10px 0; font-size: 0.85rem; }
-textarea {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 0.95rem;
   font-family: inherit;
-  resize: vertical;
+  cursor: pointer;
+  margin-top: 10px;
 }
+
+.btn:hover:not(:disabled) {
+  background: var(--gain-deep);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .btn-link {
   display: block;
   width: 100%;
   padding: 10px;
   background: none;
   border: none;
-  color: #64748b;
+  color: var(--ink-soft);
   font-size: 0.85rem;
+  font-family: inherit;
   text-decoration: underline;
   cursor: pointer;
   margin-top: 4px;
 }
-.offline-banner {
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 0.8rem;
-  padding: 8px 12px;
-  border-radius: 6px;
+
+/* Progress reads as an instrument: mono, tabular, quiet. */
+.progress {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sage);
   margin-bottom: 12px;
 }
-.error { color: #dc2626; font-size: 0.9rem; margin-top: 8px; }
-.score-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-.score-row:last-child { border-bottom: none; }
-.gain-positive { color: #16a34a; font-weight: 600; }
-.gain-negative { color: #dc2626; font-weight: 600; }
+
+.question-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 18px;
+}
+
+.option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper);
+  font-size: 0.97rem;
+  font-family: inherit;
+  color: var(--ink);
+  margin-bottom: 9px;
+  cursor: pointer;
+}
+
+.option:hover {
+  border-color: var(--ink);
+}
+
+.option.selected {
+  border-color: var(--gain);
+  background: var(--gain-wash);
+}
+
+.rating-row {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.rating-row button {
+  flex: 1;
+  padding: 13px 0;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rating-row button:hover {
+  border-color: var(--ink);
+}
+
+.rating-row button.selected {
+  border-color: var(--gain);
+  background: var(--gain);
+  color: #fff;
+}
+
+.nps-row {
+  flex-wrap: wrap;
+}
+
+.nps-row button {
+  flex: 1 1 14%;
+  padding: 10px 0;
+  font-size: 0.85rem;
+}
+
+.offline-banner {
+  background: var(--amber-wash);
+  color: var(--amber);
+  border: 1px solid rgba(148, 101, 21, 0.2);
+  font-size: 0.8rem;
+  padding: 9px 12px;
+  border-radius: 2px;
+  margin-bottom: 14px;
+}
+
+.error {
+  color: var(--flag);
+  font-size: 0.88rem;
+  margin-top: 10px;
+}
+
+/* Results: the gain is the number that matters, so it's the one that gets
+   emphasis — same reading as the landing page's plot. */
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+}
+
+.score-row:last-child {
+  border-bottom: none;
+}
+
+.score-row span:last-child {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.gain-positive {
+  color: var(--gain);
+}
+
+.gain-negative {
+  color: var(--flag);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--gain);
+  outline-offset: 2px;
+}

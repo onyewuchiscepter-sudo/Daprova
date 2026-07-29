@@ -3,3 +3,47 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design tokens. Mirrors the Tailwind theme in tailwind.config.js — these
+   exist for the hand-written landing-page stylesheet, which predates the
+   theme. Keep the two in sync. */
+:root {
+  --ink: #12212e;
+  --ink-soft: #4a5a63;
+  --ground: #f1f4f2;
+  --paper: #ffffff;
+  --gain: #0e7c5a;
+  --gain-deep: #0a5d43;
+  --baseline: #5f736d;
+  --rule: #d7ded9;
+  --amber: #946515;
+
+  --display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
+  --body: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Figures should never jitter as they poll — every number in this product
+     sits in a table, a stat tile, or a live-updating dashboard cell. */
+  .font-mono,
+  code,
+  kbd,
+  samp {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The browser default focus ring disappears against the jade primary
+     buttons, so set one that reads on both light and dark surfaces. */
+  :focus-visible {
+    outline: 2px solid var(--gain);
+    outline-offset: 2px;
+  }
+}

@@ -182,8 +182,8 @@ export default function CourseDetailPage() {
     },
   });
 
-  if (isLoading) return <p className="text-slate-500">Loading…</p>;
-  if (error) return <p className="text-red-600">{(error as Error).message}</p>;
+  if (isLoading) return <p className="text-ink-soft">Loading…</p>;
+  if (error) return <p className="text-flag">{(error as Error).message}</p>;
   if (!course) return null;
 
   const activeAreas = course.areas.filter((a) => a.is_active);
@@ -208,74 +208,74 @@ export default function CourseDetailPage() {
         {editingName ? (
           <div className="flex items-center gap-2">
             <input className="border rounded px-2 py-1 text-lg font-semibold" value={courseName} onChange={(e) => setCourseName(e.target.value)} autoFocus />
-            <button onClick={() => renameMutation.mutate()} disabled={!courseName || renameMutation.isPending} className="text-sm text-slate-700 underline">
+            <button onClick={() => renameMutation.mutate()} disabled={!courseName || renameMutation.isPending} className="text-sm text-ink underline">
               Save
             </button>
-            <button onClick={() => setEditingName(false)} className="text-sm text-slate-500 underline">
+            <button onClick={() => setEditingName(false)} className="text-sm text-ink-soft underline">
               Cancel
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-slate-900">{course.name}</h1>
+            <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink">{course.name}</h1>
             <button
               onClick={() => {
                 setCourseName(course.name);
                 setEditingName(true);
               }}
-              className="text-xs text-slate-500 hover:underline"
+              className="text-xs text-ink-soft hover:underline"
             >
               Rename
             </button>
           </div>
         )}
         <div className="flex items-center gap-2">
-          {course.is_locked && <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-1">Locked</span>}
+          {course.is_locked && <span className="text-xs bg-amber-wash text-amber rounded px-2 py-1">Locked</span>}
           <button
             onClick={() => cloneMutation.mutate()}
             disabled={cloneMutation.isPending}
-            className="text-sm border rounded px-3 py-1.5 hover:bg-slate-100"
+            className="text-sm border rounded px-3 py-1.5 hover:border-ink"
           >
             Clone
           </button>
           {confirmDelete ? (
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-600">Delete?</span>
-              <button onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="text-red-600 underline">
+              <span className="text-ink-soft">Delete?</span>
+              <button onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} className="text-flag underline">
                 {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
               </button>
-              <button onClick={() => setConfirmDelete(false)} className="text-slate-500 underline">
+              <button onClick={() => setConfirmDelete(false)} className="text-ink-soft underline">
                 Cancel
               </button>
             </div>
           ) : (
-            <button onClick={() => setConfirmDelete(true)} className="text-sm text-red-600 hover:underline">
+            <button onClick={() => setConfirmDelete(true)} className="text-sm text-flag hover:underline">
               Delete
             </button>
           )}
         </div>
       </div>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-ink-soft mb-6">
         {course.category} · part of{' '}
         <Link to={`/frameworks/${course.framework.id}`} className="underline">
           {course.framework.name}
         </Link>
       </p>
-      {deleteMutation.isError && <p className="text-sm text-red-600 mb-4">{(deleteMutation.error as Error).message}</p>}
+      {deleteMutation.isError && <p className="text-sm text-flag mb-4">{(deleteMutation.error as Error).message}</p>}
 
       {course.is_locked && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3 mb-6">
+        <div className="bg-amber-wash border border-amber/20 text-amber text-sm rounded-lg p-3 mb-6">
           This course is locked because a cohort has started assessments against it. Clone it to make changes.
         </div>
       )}
 
       <div className="space-y-4">
         {course.areas.map((area) => (
-          <div key={area.id} className={`bg-white rounded-lg shadow p-5 ${!area.is_active ? 'opacity-50' : ''}`}>
+          <div key={area.id} className={`bg-paper rounded-lg border border-rule p-5 ${!area.is_active ? 'opacity-50' : ''}`}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="font-medium text-slate-900">{area.name}</h2>
-                <p className="text-xs text-slate-500">
+                <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink">{area.name}</h2>
+                <p className="text-xs text-ink-soft">
                   {area.questions.filter((q) => q.is_active).length} of {area.questions.length} questions active
                 </p>
               </div>
@@ -283,11 +283,11 @@ export default function CourseDetailPage() {
                 <div>
                   {confirmDeactivate === area.id ? (
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="text-slate-600">Deactivate this area?</span>
-                      <button onClick={() => deactivateAreaMutation.mutate(area.id)} className="text-red-600 underline">
+                      <span className="text-ink-soft">Deactivate this area?</span>
+                      <button onClick={() => deactivateAreaMutation.mutate(area.id)} className="text-flag underline">
                         Confirm
                       </button>
-                      <button onClick={() => setConfirmDeactivate(null)} className="text-slate-500 underline">
+                      <button onClick={() => setConfirmDeactivate(null)} className="text-ink-soft underline">
                         Cancel
                       </button>
                     </div>
@@ -296,7 +296,7 @@ export default function CourseDetailPage() {
                       onClick={() => setConfirmDeactivate(area.id)}
                       disabled={activeAreas.length <= 1}
                       title={activeAreas.length <= 1 ? 'At least one active area is required' : ''}
-                      className="text-sm text-red-600 hover:underline disabled:text-slate-300 disabled:no-underline"
+                      className="text-sm text-flag hover:underline disabled:text-sage disabled:no-underline"
                     >
                       Deactivate area
                     </button>
@@ -306,7 +306,7 @@ export default function CourseDetailPage() {
             </div>
 
             {area.active_question_warning && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-2 mb-3">Fewer than 8 active questions remain in this area.</div>
+              <div className="bg-flag-wash border border-flag/20 text-flag text-xs rounded p-2 mb-3">Fewer than 8 active questions remain in this area.</div>
             )}
 
             <ul className="divide-y">
@@ -324,16 +324,16 @@ export default function CourseDetailPage() {
                     />
                   ) : (
                     <div className="flex items-start justify-between gap-4">
-                      <div className="text-sm text-slate-700">
-                        <span className={!q.is_active ? 'line-through text-slate-400' : ''}>{q.question_text}</span>
-                        <span className="ml-2 text-xs text-slate-400">({q.assessment_type})</span>
+                      <div className="text-sm text-ink">
+                        <span className={!q.is_active ? 'line-through text-sage' : ''}>{q.question_text}</span>
+                        <span className="ml-2 text-xs text-sage">({q.assessment_type})</span>
                       </div>
                       {!course.is_locked && (
                         <div className="flex items-center gap-3 shrink-0">
-                          <button onClick={() => startEdit(q)} className="text-xs text-slate-500 hover:underline">
+                          <button onClick={() => startEdit(q)} className="text-xs text-ink-soft hover:underline">
                             Edit
                           </button>
-                          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <label className="flex items-center gap-1.5 text-xs text-ink-soft">
                             <input
                               type="checkbox"
                               checked={q.is_active}
@@ -362,13 +362,13 @@ export default function CourseDetailPage() {
                     valid={questionFormValid(newQuestion)}
                   />
                 ) : bulkUploadAreaId === area.id ? (
-                  <div className="bg-slate-50 rounded p-3 space-y-2">
-                    <p className="text-xs text-slate-600">
+                  <div className="bg-ground rounded p-3 space-y-2">
+                    <p className="text-xs text-ink-soft">
                       Columns: <code>question_text, option_a, option_b, option_c, option_d, correct_option, assessment_type</code> (last column
                       optional, defaults to "both").
                     </p>
                     <div className="flex items-center gap-3">
-                      <button onClick={downloadQuestionsCsvTemplate} className="text-xs text-slate-500 hover:underline">
+                      <button onClick={downloadQuestionsCsvTemplate} className="text-xs text-ink-soft hover:underline">
                         Download template
                       </button>
                       <input
@@ -382,13 +382,13 @@ export default function CourseDetailPage() {
                         }}
                         className="text-xs"
                       />
-                      <button onClick={() => setBulkUploadAreaId(null)} className="text-xs text-slate-500 hover:underline">
+                      <button onClick={() => setBulkUploadAreaId(null)} className="text-xs text-ink-soft hover:underline">
                         Cancel
                       </button>
                     </div>
-                    {bulkUploadMutation.isPending && <p className="text-xs text-slate-500">Uploading…</p>}
+                    {bulkUploadMutation.isPending && <p className="text-xs text-ink-soft">Uploading…</p>}
                     {bulkErrors && (
-                      <ul className="text-xs text-red-600 list-disc pl-4">
+                      <ul className="text-xs text-flag list-disc pl-4">
                         {bulkErrors.map((e, i) => (
                           <li key={i}>{e}</li>
                         ))}
@@ -402,7 +402,7 @@ export default function CourseDetailPage() {
                         setAddingQuestionForArea(area.id);
                         setNewQuestion(EMPTY_QUESTION_FORM);
                       }}
-                      className="text-sm text-slate-700 hover:underline"
+                      className="text-sm text-ink hover:underline"
                     >
                       + Add question
                     </button>
@@ -411,7 +411,7 @@ export default function CourseDetailPage() {
                         setBulkUploadAreaId(area.id);
                         setBulkErrors(null);
                       }}
-                      className="text-sm text-slate-700 hover:underline"
+                      className="text-sm text-ink hover:underline"
                     >
                       Bulk upload CSV
                     </button>
@@ -424,8 +424,8 @@ export default function CourseDetailPage() {
       </div>
 
       {!course.is_locked && (
-        <div className="mt-6 bg-white rounded-lg shadow p-5">
-          <h3 className="font-medium text-slate-900 mb-2">Add competency area</h3>
+        <div className="mt-6 bg-paper rounded-lg border border-rule p-5">
+          <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-2">Add competency area</h3>
           <div className="flex gap-2">
             <input
               className="flex-1 border rounded px-3 py-2 text-sm"
@@ -436,7 +436,7 @@ export default function CourseDetailPage() {
             <button
               onClick={() => addAreaMutation.mutate(newAreaName)}
               disabled={!newAreaName || addAreaMutation.isPending}
-              className="bg-slate-900 text-white text-sm rounded px-4 py-2 disabled:opacity-50"
+              className="bg-gain text-white text-sm rounded px-4 py-2 disabled:opacity-50"
             >
               Add
             </button>
@@ -444,23 +444,23 @@ export default function CourseDetailPage() {
         </div>
       )}
 
-      <h2 className="font-medium text-slate-900 mt-8 mb-2">Cohorts</h2>
+      <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mt-8 mb-2">Cohorts</h2>
       <ul className="space-y-2 mb-6">
         {cohorts?.map((c) => (
           <li key={c.id}>
-            <Link to={`/cohorts/${c.id}`} className="block bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
+            <Link to={`/cohorts/${c.id}`} className="block bg-paper rounded-lg border border-rule p-4 hover:border-ink transition-shadow">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-900">{c.name}</span>
-                <span className="text-xs bg-slate-100 rounded-full px-2 py-1 capitalize">{c.status}</span>
+                <span className="font-medium text-ink">{c.name}</span>
+                <span className="text-xs bg-ground rounded px-2 py-1 capitalize">{c.status}</span>
               </div>
             </Link>
           </li>
         ))}
-        {cohorts?.length === 0 && <li className="text-slate-500 text-sm">No cohorts yet.</li>}
+        {cohorts?.length === 0 && <li className="text-ink-soft text-sm">No cohorts yet.</li>}
       </ul>
 
-      <div className="bg-white rounded-lg shadow p-5">
-        <h3 className="font-medium text-slate-900 mb-3">Create cohort</h3>
+      <div className="bg-paper rounded-lg border border-rule p-5">
+        <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">Create cohort</h3>
         <div className="space-y-3">
           <input
             className="w-full border rounded px-3 py-2 text-sm"
@@ -468,11 +468,11 @@ export default function CourseDetailPage() {
             value={cohortName}
             onChange={(e) => setCohortName(e.target.value)}
           />
-          {createCohortMutation.isError && <p className="text-sm text-red-600">{(createCohortMutation.error as Error).message}</p>}
+          {createCohortMutation.isError && <p className="text-sm text-flag">{(createCohortMutation.error as Error).message}</p>}
           <button
             onClick={() => createCohortMutation.mutate()}
             disabled={!cohortName || createCohortMutation.isPending}
-            className="bg-slate-900 text-white text-sm rounded px-4 py-2 disabled:opacity-50"
+            className="bg-gain text-white text-sm rounded px-4 py-2 disabled:opacity-50"
           >
             {createCohortMutation.isPending ? 'Creating…' : 'Create cohort'}
           </button>
@@ -500,7 +500,7 @@ function QuestionForm(props: {
   ];
 
   return (
-    <div className="bg-slate-50 rounded p-3 space-y-2">
+    <div className="bg-ground rounded p-3 space-y-2">
       <input
         className="w-full border rounded px-2 py-1.5 text-sm"
         placeholder="Question text"
@@ -525,7 +525,7 @@ function QuestionForm(props: {
         </div>
       ))}
       <div className="flex items-center justify-between">
-        <label className="text-xs text-slate-500 flex items-center gap-2">
+        <label className="text-xs text-ink-soft flex items-center gap-2">
           Used for
           <select
             className="border rounded px-2 py-1 text-xs"
@@ -538,10 +538,10 @@ function QuestionForm(props: {
           </select>
         </label>
         <div className="flex gap-3">
-          <button onClick={onCancel} className="text-xs text-slate-500 hover:underline">
+          <button onClick={onCancel} className="text-xs text-ink-soft hover:underline">
             Cancel
           </button>
-          <button onClick={onSubmit} disabled={!valid || submitting} className="bg-slate-900 text-white text-xs rounded px-3 py-1.5 disabled:opacity-50">
+          <button onClick={onSubmit} disabled={!valid || submitting} className="bg-gain text-white text-xs rounded px-3 py-1.5 disabled:opacity-50">
             {submitting ? 'Saving…' : submitLabel}
           </button>
         </div>

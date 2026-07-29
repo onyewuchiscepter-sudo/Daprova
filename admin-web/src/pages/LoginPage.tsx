@@ -1,30 +1,31 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuth } from '../auth';
+import AuthShell, { Field, FormError, FormNotice, SubmitButton } from '../components/AuthShell';
 
 export default function LoginPage() {
   const { signIn, selectOrg, pendingOrgSelection } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@acme-edtech.test');
-  const [password, setPassword] = useState('devpassword123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   async function handleForgotPassword() {
     if (!email) {
-      setError('Enter your email above first, then click "Forgot password?"');
+      setError('Enter your email address above, then select “Forgot password?” again.');
       return;
     }
     setError(null);
     setResetMessage(null);
     try {
       await sendPasswordResetEmail(auth, email);
-      setResetMessage('Password reset email sent — check your inbox.');
+      setResetMessage(`Reset link sent to ${email}. Check your inbox.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send reset email');
+      setError(err instanceof Error ? err.message : 'Could not send the reset email.');
     }
   }
 
@@ -34,11 +35,11 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const { requiresOrgSelection } = await signIn(email, password);
-      if (!requiresOrgSelection) navigate('/frameworks');
+      if (!requiresOrgSelection) navigate('/courses');
       // else: pendingOrgSelection is now set on the auth context, and this
       // component re-renders below showing the org picker instead.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Login failed.');
     } finally {
       setSubmitting(false);
     }
@@ -49,9 +50,9 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await selectOrg(orgId);
-      navigate('/frameworks');
+      navigate('/courses');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not select organisation');
+      setError(err instanceof Error ? err.message : 'Could not open that organisation.');
     } finally {
       setSubmitting(false);
     }
@@ -62,60 +63,48 @@ export default function LoginPage() {
   // until they pick which org to enter.
   if (pendingOrgSelection) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="bg-white shadow rounded-lg p-8 max-w-sm w-full space-y-4">
-          <h1 className="text-xl font-semibold text-slate-900">Choose an organisation</h1>
-          <div className="space-y-2">
-            {pendingOrgSelection.orgs.map((o) => (
-              <button
-                key={o.id}
-                disabled={submitting}
-                onClick={() => handleSelectOrg(o.id)}
-                className="w-full text-left border rounded px-3 py-2 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <span className="font-medium text-slate-900">{o.name}</span>
-                <span className="text-xs text-slate-500 ml-2 capitalize">({o.role})</span>
-              </button>
-            ))}
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+      <AuthShell eyebrow="Signed in" title="Choose an organisation" intro="Your account has access to more than one.">
+        <div className="space-y-2">
+          {pendingOrgSelection.orgs.map((o) => (
+            <button
+              key={o.id}
+              disabled={submitting}
+              onClick={() => handleSelectOrg(o.id)}
+              className="w-full text-left border border-rule rounded px-3 py-2.5 hover:border-gain disabled:opacity-50 transition-colors"
+            >
+              <span className="block text-sm font-medium text-ink">{o.name}</span>
+              <span className="block font-mono text-[11px] uppercase tracking-[0.1em] text-sage mt-0.5">{o.role}</span>
+            </button>
+          ))}
+          {error && <FormError>{error}</FormError>}
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <form onSubmit={handleLogin} className="bg-white shadow rounded-lg p-8 max-w-sm w-full space-y-4">
-        <h1 className="text-xl font-semibold text-slate-900">Daprova Admin — Sign in</h1>
-        <input
-          className="w-full border rounded px-3 py-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-        />
-        <input
-          className="w-full border rounded px-3 py-2"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {resetMessage && <p className="text-sm text-emerald-600">{resetMessage}</p>}
-        <button type="submit" disabled={submitting} className="w-full bg-slate-900 text-white rounded px-3 py-2 disabled:opacity-50">
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-        <button type="button" onClick={handleForgotPassword} className="w-full text-xs text-slate-500 underline">
+    <AuthShell
+      eyebrow="Administrator"
+      title="Sign in"
+      footer={
+        <>
+          New organisation?{' '}
+          <Link to="/signup" className="text-ink underline hover:text-gain">
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleLogin} className="space-y-4">
+        <Field label="Email" value={email} onChange={setEmail} type="email" required autoComplete="email" />
+        <Field label="Password" value={password} onChange={setPassword} type="password" required autoComplete="current-password" />
+        {error && <FormError>{error}</FormError>}
+        {resetMessage && <FormNotice>{resetMessage}</FormNotice>}
+        <SubmitButton disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</SubmitButton>
+        <button type="button" onClick={handleForgotPassword} className="w-full text-xs text-ink-soft hover:text-ink underline">
           Forgot password?
         </button>
-        <p className="text-xs text-slate-500 text-center">
-          New organisation?{' '}
-          <a href="/signup" className="underline">
-            Sign up
-          </a>
-        </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }

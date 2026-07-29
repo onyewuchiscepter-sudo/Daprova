@@ -5,21 +5,9 @@
    bars rising off that line) rather than a headline-and-buttons block.
    Everything is namespaced under .dp- so it can't leak into the Tailwind app. */
 
+/* Tokens (--ink, --gain, --display, …) come from :root in src/index.css,
+   shared with the Tailwind theme the rest of the app uses. */
 .dp-root {
-  --ink: #12212e;
-  --ink-soft: #4a5a63;
-  --ground: #f1f4f2;
-  --paper: #ffffff;
-  --gain: #0e7c5a;
-  --gain-deep: #0a5d43;
-  --baseline: #93a5a0;
-  --rule: #d7ded9;
-  --amber: #b8801f;
-
-  --display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
-  --body: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, monospace;
-
   background: var(--ground);
   color: var(--ink);
   font-family: var(--body);

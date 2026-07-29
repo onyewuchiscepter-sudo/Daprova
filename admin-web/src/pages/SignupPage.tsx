@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { apiFetch } from '../api';
 import { useAuth } from '../auth';
+import AuthShell, { Field, Fieldset, FormError, SelectField, SubmitButton } from '../components/AuthShell';
 
 const ORG_TYPES = [
   { value: 'edtech', label: 'EdTech' },
@@ -95,113 +96,87 @@ export default function SignupPage() {
       if (result.org.billing_status === 'pending_manual_quote') {
         navigate('/signup/contact-sales');
       } else {
-        navigate('/frameworks/new');
+        navigate('/courses/new');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Signup failed');
+      setError(err instanceof Error ? err.message : 'Could not create the account.');
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 py-10">
-      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-8 max-w-lg w-full space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Create your Daprova account</h1>
-          <p className="text-sm text-slate-500 mt-1">Set up your organisation and start measuring outcomes.</p>
-        </div>
-
-        <fieldset className="space-y-3">
-          <legend className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">Organisation</legend>
+    <AuthShell
+      wide
+      eyebrow="Get started"
+      title="Create your organisation"
+      intro="Free to start, no card required. We review new registrations before team invites open."
+      footer={
+        <>
+          Already registered?{' '}
+          <Link to="/login" className="text-ink underline hover:text-gain">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-7">
+        <Fieldset legend="Organisation">
           <Field label="Organisation name" value={orgName} onChange={setOrgName} required />
           <SelectField label="Organisation type" value={orgType} onChange={setOrgType} options={ORG_TYPES} />
           <Field label="CAC registration number" value={cacNumber} onChange={setCacNumber} required />
-          <Field label="Website or social media link (optional)" value={website} onChange={setWebsite} type="url" />
-          <Field label="Physical address / state" value={address} onChange={setAddress} />
-        </fieldset>
+          <Field label="Website or social link" value={website} onChange={setWebsite} type="url" placeholder="Optional" />
+          <Field label="Address or state" value={address} onChange={setAddress} placeholder="Optional" />
+        </Fieldset>
 
-        <fieldset className="space-y-3">
-          <legend className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">Admin account</legend>
-          <Field label="Full name" value={adminFullName} onChange={setAdminFullName} required />
-          <Field label="Role/title" value={adminTitle} onChange={setAdminTitle} placeholder="e.g. Program Manager" />
-          <Field label="Email address" value={adminEmail} onChange={setAdminEmail} type="email" required />
-          <Field label="Phone number" value={adminPhone} onChange={setAdminPhone} type="tel" />
-          <Field label="Password" value={password} onChange={setPassword} type="password" required minLength={8} />
-        </fieldset>
+        <Fieldset legend="Your account">
+          <Field label="Full name" value={adminFullName} onChange={setAdminFullName} required autoComplete="name" />
+          <Field label="Role or title" value={adminTitle} onChange={setAdminTitle} placeholder="e.g. Programme Manager" />
+          <Field label="Email" value={adminEmail} onChange={setAdminEmail} type="email" required autoComplete="email" />
+          <Field label="Phone" value={adminPhone} onChange={setAdminPhone} type="tel" placeholder="Optional" />
+          <Field
+            label="Password"
+            value={password}
+            onChange={setPassword}
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            hint="At least 8 characters."
+          />
+        </Fieldset>
 
-        <fieldset className="space-y-3">
-          <legend className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">Intended usage</legend>
+        <Fieldset legend="How you'll use it">
           <SelectField label="Primary use case" value={useCase} onChange={setUseCase} options={USE_CASES} />
           <Field
-            label="Expected number of students in your first cohort"
+            label="Expected students in your first cohort"
             value={expectedStudentCount}
             onChange={setExpectedStudentCount}
             type="number"
             required
             min={1}
+            hint="Sets your starting plan. You can change it later."
           />
-          <SelectField label="Expected cadence" value={cadence} onChange={setCadence} options={CADENCES} />
-        </fieldset>
+          <SelectField label="How often you run cohorts" value={cadence} onChange={setCadence} options={CADENCES} />
+        </Fieldset>
 
-        <fieldset className="space-y-3">
-          <legend className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">Context</legend>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={reportsToFunder} onChange={(e) => setReportsToFunder(e.target.checked)} />
-            Reporting to a funder/board/accreditation body?
+        <Fieldset legend="Context">
+          <label className="flex items-center gap-2.5 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={reportsToFunder}
+              onChange={(e) => setReportsToFunder(e.target.checked)}
+              className="accent-gain w-4 h-4"
+            />
+            We report to a funder, board, or accreditation body
           </label>
           {reportsToFunder && <Field label="Which one?" value={reportsToFunderName} onChange={setReportsToFunderName} />}
           <SelectField label="How did you hear about Daprova?" value={referralSource} onChange={setReferralSource} options={REFERRAL_SOURCES} />
-        </fieldset>
+        </Fieldset>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button type="submit" disabled={submitting} className="w-full bg-slate-900 text-white rounded px-3 py-2 disabled:opacity-50">
-          {submitting ? 'Creating your account…' : 'Create account'}
-        </button>
+        {error && <FormError>{error}</FormError>}
+        <SubmitButton disabled={submitting}>{submitting ? 'Creating your organisation…' : 'Create organisation'}</SubmitButton>
       </form>
-    </div>
-  );
-}
-
-function Field(props: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  required?: boolean;
-  placeholder?: string;
-  minLength?: number;
-  min?: number;
-}) {
-  return (
-    <label className="block text-xs text-slate-500">
-      {props.label}
-      <input
-        className="mt-1 block w-full border rounded px-3 py-2 text-sm text-slate-900"
-        type={props.type ?? 'text'}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        required={props.required}
-        placeholder={props.placeholder}
-        minLength={props.minLength}
-        min={props.min}
-      />
-    </label>
-  );
-}
-
-function SelectField(props: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <label className="block text-xs text-slate-500">
-      {props.label}
-      <select className="mt-1 block w-full border rounded px-3 py-2 text-sm text-slate-900" value={props.value} onChange={(e) => props.onChange(e.target.value)}>
-        {props.options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    </AuthShell>
   );
 }

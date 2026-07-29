@@ -4,6 +4,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { apiFetch } from '../api';
 import { useAuth } from '../auth';
+import AuthShell, { Field, FormError, SubmitButton } from '../components/AuthShell';
 
 type InvitePreview = { org_name: string; email: string; role: 'admin' | 'viewer' };
 
@@ -22,7 +23,7 @@ export default function AcceptInvitePage() {
   useEffect(() => {
     apiFetch(`/api/v1/invites/${token}`)
       .then(setInvite)
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Invite not found'));
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'This invite link is not valid.'));
   }, [token]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,9 +40,9 @@ export default function AcceptInvitePage() {
         body: JSON.stringify({ display_name: displayName || undefined }),
       });
       await completeSession(result);
-      navigate('/frameworks');
+      navigate('/courses');
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Could not accept invite');
+      setSubmitError(err instanceof Error ? err.message : 'Could not accept the invite.');
     } finally {
       setSubmitting(false);
     }
@@ -49,46 +50,51 @@ export default function AcceptInvitePage() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-red-600">{loadError}</p>
-      </div>
+      <AuthShell eyebrow="Invitation" title="This link doesn't work">
+        <p className="text-sm text-ink-soft">
+          {loadError} Invites expire after a set period — ask whoever invited you to send a new one.
+        </p>
+      </AuthShell>
     );
   }
   if (!invite) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading…</div>;
+    return (
+      <AuthShell eyebrow="Invitation" title="Checking your invite…">
+        <p className="text-sm text-ink-soft">One moment.</p>
+      </AuthShell>
+    );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-8 max-w-sm w-full space-y-4">
-        <h1 className="text-xl font-semibold text-slate-900">Join {invite.org_name}</h1>
-        <p className="text-sm text-slate-500">
-          You've been invited as <span className="capitalize font-medium">{invite.role}</span>. Set a password to accept.
-        </p>
-        <label className="block text-xs text-slate-500">
-          Email
-          <input className="mt-1 block w-full border rounded px-3 py-2 bg-slate-100 text-slate-500" value={invite.email} disabled />
-        </label>
-        <label className="block text-xs text-slate-500">
-          Full name
-          <input className="mt-1 block w-full border rounded px-3 py-2" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        </label>
-        <label className="block text-xs text-slate-500">
-          Password
+    <AuthShell
+      eyebrow={`Invited as ${invite.role}`}
+      title={`Join ${invite.org_name}`}
+      intro="Set a password to finish setting up your account."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <label className="block">
+          <span className="block text-[13px] font-medium text-ink mb-1.5">Email</span>
           <input
-            type="password"
-            className="mt-1 block w-full border rounded px-3 py-2"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-            required
+            className="block w-full border border-rule rounded bg-ground px-3 py-2 text-sm text-ink-soft"
+            value={invite.email}
+            disabled
           />
+          <span className="block mt-1 text-xs text-sage">Set by whoever invited you.</span>
         </label>
-        {submitError && <p className="text-sm text-red-600">{submitError}</p>}
-        <button type="submit" disabled={submitting} className="w-full bg-slate-900 text-white rounded px-3 py-2 disabled:opacity-50">
-          {submitting ? 'Joining…' : 'Accept invite'}
-        </button>
+        <Field label="Full name" value={displayName} onChange={setDisplayName} autoComplete="name" />
+        <Field
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          type="password"
+          required
+          minLength={8}
+          autoComplete="new-password"
+          hint="At least 8 characters."
+        />
+        {submitError && <FormError>{submitError}</FormError>}
+        <SubmitButton disabled={submitting}>{submitting ? 'Joining…' : 'Accept invite'}</SubmitButton>
       </form>
-    </div>
+    </AuthShell>
   );
 }

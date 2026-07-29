@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { Banner, Button, EmptyState, PageHeader } from '../components/ui';
 
 type Template = { id: string; name: string; category: string; course_count: number; area_count: number };
 
@@ -30,37 +31,41 @@ export default function ImportFrameworkTemplatePage() {
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900 mb-1">Import a framework template</h1>
-      <p className="text-sm text-slate-500 mb-6">Brings in an entire curriculum at once — the framework and every one of its courses.</p>
+      <PageHeader
+        eyebrow="Templates"
+        title="Import a framework template"
+        sub="Brings in an entire curriculum at once — the framework and every course under it."
+      />
 
-      {isLoading && <p className="text-slate-500">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-soft">Loading…</p>}
       {templates && multiCourseTemplates.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-slate-500">No multi-course templates are available yet.</div>
+        <EmptyState>No multi-course templates are available yet.</EmptyState>
       )}
 
-      <div className="space-y-3 mb-6">
+      <div className="space-y-2 mb-6">
         {multiCourseTemplates.map((t) => (
           <button
             key={t.id}
             onClick={() => setTemplateId(t.id)}
-            className={`w-full text-left rounded-lg border p-4 transition-colors ${
-              templateId === t.id ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-400'
+            aria-pressed={templateId === t.id}
+            className={`w-full text-left rounded-lg border px-4 py-3.5 transition-colors ${
+              templateId === t.id ? 'border-gain bg-gain-wash' : 'border-rule bg-paper hover:border-ink'
             }`}
           >
-            <p className="font-medium text-slate-900">{t.name}</p>
-            <p className="text-xs text-slate-500">{t.course_count} courses</p>
+            <p className="font-medium text-ink">{t.name}</p>
+            <p className="font-mono text-[11px] text-sage mt-0.5">{t.course_count} courses</p>
           </button>
         ))}
       </div>
 
-      {importMutation.isError && <p className="text-sm text-red-600 mb-4">{(importMutation.error as Error).message}</p>}
-      <button
-        onClick={() => importMutation.mutate()}
-        disabled={!templateId || importMutation.isPending}
-        className="bg-slate-900 text-white text-sm rounded px-4 py-2 disabled:opacity-50"
-      >
+      {importMutation.isError && (
+        <div className="mb-4">
+          <Banner tone="flag">{(importMutation.error as Error).message}</Banner>
+        </div>
+      )}
+      <Button onClick={() => importMutation.mutate()} disabled={!templateId || importMutation.isPending}>
         {importMutation.isPending ? 'Importing…' : 'Import template'}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { Banner, EmptyState, LinkButton, PageHeader } from '../components/ui';
 
 type Framework = {
   id: string;
@@ -18,33 +19,37 @@ export default function FrameworksListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-slate-900">Competency Frameworks</h1>
-        <div className="flex items-center gap-2">
-          <Link to="/frameworks/import" className="text-sm border rounded px-4 py-2 hover:bg-slate-100">
-            Import template
-          </Link>
-          <Link to="/courses/new" className="bg-slate-900 text-white text-sm rounded px-4 py-2">
-            + New Course
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Frameworks"
+        sub="A framework groups related courses. Creating a course creates its framework automatically."
+        actions={
+          <>
+            <LinkButton to="/frameworks/import" variant="secondary">
+              Import template
+            </LinkButton>
+            <LinkButton to="/courses/new">New course</LinkButton>
+          </>
+        }
+      />
 
-      {isLoading && <p className="text-slate-500">Loading…</p>}
-      {error && <p className="text-red-600">{(error as Error).message}</p>}
+      {isLoading && <p className="text-sm text-ink-soft">Loading…</p>}
+      {error && <Banner tone="flag">{(error as Error).message}</Banner>}
 
       {data && data.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-slate-500">
-          No frameworks yet — creating a course (from a template or from scratch) creates its framework automatically.
-        </div>
+        <EmptyState action={<LinkButton to="/courses/new">Create a course</LinkButton>}>
+          No frameworks yet. Creating a course — from a template or from scratch — sets one up for you.
+        </EmptyState>
       )}
 
       <ul className="space-y-2">
         {data?.map((f) => (
           <li key={f.id}>
-            <Link to={`/frameworks/${f.id}`} className="block bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
-              <p className="font-medium text-slate-900">{f.name}</p>
-              <p className="text-xs text-slate-500">
+            <Link
+              to={`/frameworks/${f.id}`}
+              className="block bg-paper border border-rule rounded-lg px-4 py-3.5 hover:border-ink transition-colors"
+            >
+              <p className="font-medium text-ink">{f.name}</p>
+              <p className="font-mono text-[11px] text-sage mt-0.5">
                 {f.category} · v{f.version}
               </p>
             </Link>

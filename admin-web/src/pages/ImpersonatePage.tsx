@@ -36,10 +36,10 @@ export default function ImpersonatePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-red-600">{error}</p>
+      <div className="min-h-screen bg-ground flex items-center justify-center px-5">
+        <p className="text-sm text-flag bg-flag-wash border border-flag/20 rounded px-4 py-3">{error}</p>
       </div>
     );
   }
-  return <div className="min-h-screen flex items-center justify-center text-slate-400">Starting impersonation session…</div>;
+  return <div className="min-h-screen bg-ground flex items-center justify-center text-sm text-ink-soft">Starting impersonation session…</div>;
 }

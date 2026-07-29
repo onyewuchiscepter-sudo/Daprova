@@ -1,74 +1,215 @@
+/* Daprova platform console (internal system-admin surface).
+   Same palette as the rest of the product, system fonts — this is a staff
+   tool, not a customer surface, so it doesn't warrant a webfont download. */
+
+:root {
+  --ink: #12212e;
+  --ink-soft: #4a5a63;
+  --ground: #f1f4f2;
+  --paper: #ffffff;
+  --gain: #0e7c5a;
+  --gain-deep: #0a5d43;
+  --gain-wash: #e6f1ec;
+  --sage: #5f736d;
+  --rule: #d7ded9;
+  --amber: #946515;
+  --amber-wash: #fbf3e3;
+  --flag: #b4463a;
+  --flag-wash: #fbeceb;
+
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
+
 #app {
-  max-width: 720px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 2rem 1.5rem 4rem;
 }
+
 h1 {
-  font-size: 1.25rem;
-  margin-bottom: 1.5rem;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.4rem;
 }
+
 h2 {
-  font-size: 1rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
   margin: 2rem 0 0.75rem;
 }
-.card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
+
+/* The console is a staff tool where the org being acted on must always be
+   unambiguous — identifiers get mono so they're scannable and never
+   confusable with prose. */
+code,
+.mono,
+.id {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85em;
 }
-label {
-  display: block;
-  font-size: 0.8rem;
-  color: #475569;
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 1.25rem;
   margin-bottom: 0.75rem;
 }
-input, select {
+
+label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 0.75rem;
+}
+
+input,
+select {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  margin-top: 0.25rem;
-  padding: 0.5rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  margin-top: 0.3rem;
+  padding: 0.55rem;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
   font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--paper);
+  color: var(--ink);
 }
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--gain);
+}
+
 button {
-  background: #0f172a;
-  color: white;
+  background: var(--gain);
+  color: #fff;
   border: none;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
+  border-radius: 2px;
+  padding: 0.55rem 1rem;
   font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
 }
+
+button:hover:not(:disabled) {
+  background: var(--gain-deep);
+}
+
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
+
+/* Destructive platform actions (suspend, ban, close) must not look like the
+   routine ones — this console can take an org offline. */
+button.danger {
+  background: var(--flag);
+}
+
+button.danger:hover:not(:disabled) {
+  background: #98392f;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--ink);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
-th, td {
+
+th {
   text-align: left;
-  padding: 0.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0.55rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sage);
 }
+
+td {
+  text-align: left;
+  padding: 0.6rem 0.55rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
 .error {
-  color: #dc2626;
+  color: var(--flag);
+  background: var(--flag-wash);
+  border: 1px solid rgba(180, 70, 58, 0.2);
+  border-radius: 2px;
+  padding: 0.6rem 0.8rem;
   font-size: 0.85rem;
 }
+
 .muted {
-  color: #64748b;
-  font-size: 0.8rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.15rem 0.4rem;
+  color: var(--sage);
+}
+
+.badge.pending {
+  color: var(--amber);
+  border-color: rgba(148, 101, 21, 0.3);
+  background: var(--amber-wash);
+}
+
+.badge.verified {
+  color: var(--gain);
+  border-color: rgba(14, 124, 90, 0.3);
+  background: var(--gain-wash);
+}
+
+.badge.banned {
+  color: var(--flag);
+  border-color: rgba(180, 70, 58, 0.3);
+  background: var(--flag-wash);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--gain);
+  outline-offset: 2px;
 }

@@ -243,7 +243,7 @@ export default function CohortDashboardPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (!cohort) return <p className="text-slate-500">Loading…</p>;
+  if (!cohort) return <p className="text-ink-soft">Loading…</p>;
 
   const prePct = cohort.total_enrolled > 0 ? Math.round((cohort.pre_completed / cohort.total_enrolled) * 100) : 0;
   const postPct = cohort.total_enrolled > 0 ? Math.round((cohort.post_completed / cohort.total_enrolled) * 100) : 0;
@@ -253,11 +253,11 @@ export default function CohortDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900 mb-1">{cohort.name}</h1>
-      <p className="text-sm text-slate-500 mb-6 capitalize">{cohort.status}</p>
+      <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink mb-1">{cohort.name}</h1>
+      <p className="text-sm text-ink-soft mb-6 capitalize">{cohort.status}</p>
 
       {cohort.status === 'locked_pending_upgrade' ? (
-        <div className="mb-6 rounded-md px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200">
+        <div className="mb-6 rounded-md px-4 py-3 text-sm bg-flag-wash text-flag border border-flag/20">
           This cohort is locked pending an upgrade payment. Existing data stays visible, but no new students or attempts can be recorded until the
           payment clears.
         </div>
@@ -265,7 +265,7 @@ export default function CohortDashboardPage() {
         cohort.capacity_status !== 'allow' && (
           <div
             className={`mb-6 rounded-md px-4 py-3 text-sm flex items-center justify-between gap-4 ${
-              cohort.capacity_status === 'block' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+              cohort.capacity_status === 'block' ? 'bg-flag-wash text-flag border border-flag/20' : 'bg-amber-wash text-amber border border-amber/20'
             }`}
           >
             <span>
@@ -277,7 +277,7 @@ export default function CohortDashboardPage() {
               <button
                 onClick={() => upgradeMutation.mutate()}
                 disabled={upgradeMutation.isPending}
-                className="shrink-0 bg-slate-900 text-white text-xs rounded px-3 py-1.5 disabled:opacity-50"
+                className="shrink-0 bg-gain text-white text-xs rounded px-3 py-1.5 disabled:opacity-50"
               >
                 {upgradeMutation.isPending ? 'Opening checkout…' : 'Upgrade now'}
               </button>
@@ -286,7 +286,7 @@ export default function CohortDashboardPage() {
         )
       )}
       {upgradeMutation.isError && (
-        <p className="text-sm text-red-600 mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
+        <p className="text-sm text-flag mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
       )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -314,7 +314,7 @@ export default function CohortDashboardPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`pb-2 text-sm font-medium capitalize border-b-2 -mb-px ${tab === t ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500'}`}
+            className={`pb-2 text-sm font-medium capitalize border-b-2 -mb-px ${tab === t ? 'border-gain text-ink' : 'border-transparent text-ink-soft'}`}
           >
             {t}
           </button>
@@ -325,12 +325,12 @@ export default function CohortDashboardPage() {
           the Overview tab's stats, competency breakdown, and learner table
           together via the same query. Not applicable to the Reports tab. */}
       {tab !== 'reports' && tab !== 'satisfaction' && (
-        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap items-end gap-3">
+        <div className="bg-paper rounded-lg border border-rule p-4 mb-6 flex flex-wrap items-end gap-3">
           {FILTER_DIMENSIONS.map((dim) => (
-            <label key={dim} className="text-xs text-slate-500">
+            <label key={dim} className="text-xs text-ink-soft">
               {DIMENSION_LABEL[dim]}
               <select
-                className="mt-1 block border rounded px-2 py-1.5 text-sm text-slate-700"
+                className="mt-1 block border rounded px-2 py-1.5 text-sm text-ink"
                 value={filters[dim] ?? ''}
                 onChange={(e) => setFilter(dim, e.target.value)}
               >
@@ -344,7 +344,7 @@ export default function CohortDashboardPage() {
             </label>
           ))}
           {hasFilters && (
-            <button onClick={clearFilters} className="text-xs text-slate-500 underline pb-1.5">
+            <button onClick={clearFilters} className="text-xs text-ink-soft underline pb-1.5">
               Clear filters
             </button>
           )}
@@ -362,13 +362,13 @@ export default function CohortDashboardPage() {
                 <Stat label="Pass rate" value={analytics.pass_rate !== null ? `${analytics.pass_rate}%` : '—'} />
               </div>
 
-              <div className="bg-white rounded-lg shadow p-5 mb-6">
-                <h3 className="font-medium text-slate-900 mb-3">Competency breakdown</h3>
+              <div className="bg-paper rounded-lg border border-rule p-5 mb-6">
+                <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">Competency breakdown</h3>
                 <div className="space-y-2">
                   {analytics.competency_breakdown.map((area) => (
                     <div key={area.area_id} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-700">{area.area_name}</span>
-                      <span className="text-slate-500">
+                      <span className="text-ink">{area.area_name}</span>
+                      <span className="text-ink-soft">
                         {area.pre_pct !== null ? `${area.pre_pct}%` : '—'} → {area.post_pct !== null ? `${area.post_pct}%` : '—'}
                       </span>
                     </div>
@@ -378,18 +378,18 @@ export default function CohortDashboardPage() {
             </>
           )}
           {analytics && analytics.n_learners === 0 && hasFilters && (
-            <div className="bg-white rounded-lg shadow p-5 mb-6 text-sm text-slate-500">No learners match the selected filters.</div>
+            <div className="bg-paper rounded-lg border border-rule p-5 mb-6 text-sm text-ink-soft">No learners match the selected filters.</div>
           )}
 
           <div className="flex justify-end mb-2">
-            <button onClick={downloadLearnersCsv} className="text-sm border rounded px-3 py-1.5 hover:bg-slate-100">
+            <button onClick={downloadLearnersCsv} className="text-sm border rounded px-3 py-1.5 hover:border-ink">
               Export CSV
             </button>
           </div>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-paper rounded-lg border border-rule overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-ground text-left text-ink-soft">
                 <tr>
                   <th className="p-3">Learner</th>
                   <th className="p-3">Pre</th>
@@ -417,7 +417,7 @@ export default function CohortDashboardPage() {
                 })}
                 {filteredLearners?.length === 0 && (
                   <tr>
-                    <td className="p-3 text-slate-500" colSpan={4}>
+                    <td className="p-3 text-ink-soft" colSpan={4}>
                       {hasFilters ? 'No learners match the selected filters.' : 'No learners yet — share the pre-assessment link to get started.'}
                     </td>
                   </tr>
@@ -431,10 +431,10 @@ export default function CohortDashboardPage() {
       {tab === 'equity' && (
         <div className="space-y-6">
           {equity?.map((breakdown) => (
-            <div key={breakdown.dimension} className="bg-white rounded-lg shadow overflow-hidden">
-              <h3 className="font-medium text-slate-900 p-4 pb-0">{DIMENSION_LABEL[breakdown.dimension] ?? breakdown.dimension}</h3>
+            <div key={breakdown.dimension} className="bg-paper rounded-lg border border-rule overflow-hidden">
+              <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink p-4 pb-0">{DIMENSION_LABEL[breakdown.dimension] ?? breakdown.dimension}</h3>
               <table className="w-full text-sm mt-3">
-                <thead className="bg-slate-50 text-left text-slate-500">
+                <thead className="bg-ground text-left text-ink-soft">
                   <tr>
                     <th className="p-3">Group</th>
                     <th className="p-3">n</th>
@@ -451,7 +451,7 @@ export default function CohortDashboardPage() {
                       <td className="p-3">
                         {g.label.replace(/_/g, ' ')}
                         {g.small_sample && (
-                          <span className="ml-2 text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5" title="Sample too small — treat with caution">
+                          <span className="ml-2 text-xs bg-amber-wash text-amber rounded px-2 py-0.5" title="Sample too small — treat with caution">
                             n&lt;5 ⚠
                           </span>
                         )}
@@ -466,7 +466,7 @@ export default function CohortDashboardPage() {
                   ))}
                   {breakdown.groups.length === 0 && (
                     <tr>
-                      <td className="p-3 text-slate-500" colSpan={7}>
+                      <td className="p-3 text-ink-soft" colSpan={7}>
                         No data yet for this dimension.
                       </td>
                     </tr>
@@ -481,7 +481,7 @@ export default function CohortDashboardPage() {
       {tab === 'satisfaction' && (
         <div className="space-y-6">
           {satisfaction && satisfaction.response_count === 0 && (
-            <div className="bg-white rounded-lg shadow p-5 text-sm text-slate-500">
+            <div className="bg-paper rounded-lg border border-rule p-5 text-sm text-ink-soft">
               No satisfaction survey responses yet — these are collected on the post-assessment link after a learner submits.
             </div>
           )}
@@ -494,51 +494,51 @@ export default function CohortDashboardPage() {
                 <Stat label="Delivery satisfaction" value={satisfaction.avg_delivery_satisfaction !== null ? `${satisfaction.avg_delivery_satisfaction} / 5` : '—'} />
               </div>
 
-              <div className="bg-white rounded-lg shadow p-5">
-                <h3 className="font-medium text-slate-900 mb-3">Net Promoter Score</h3>
+              <div className="bg-paper rounded-lg border border-rule p-5">
+                <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">Net Promoter Score</h3>
                 <div className="flex items-center gap-6">
                   <div>
-                    <p className="text-2xl font-semibold text-slate-900">{satisfaction.nps_score !== null ? satisfaction.nps_score : '—'}</p>
-                    <p className="text-xs text-slate-500">−100 to +100</p>
+                    <p className="text-2xl font-semibold text-ink">{satisfaction.nps_score !== null ? satisfaction.nps_score : '—'}</p>
+                    <p className="text-xs text-ink-soft">−100 to +100</p>
                   </div>
                   <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
                     <div>
-                      <p className="text-slate-500">Promoters (9–10)</p>
-                      <p className="font-medium text-emerald-700">{satisfaction.nps_promoters}</p>
+                      <p className="text-ink-soft">Promoters (9–10)</p>
+                      <p className="font-medium text-gain">{satisfaction.nps_promoters}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Passives (7–8)</p>
-                      <p className="font-medium text-slate-700">{satisfaction.nps_passives}</p>
+                      <p className="text-ink-soft">Passives (7–8)</p>
+                      <p className="font-medium text-ink">{satisfaction.nps_passives}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Detractors (0–6)</p>
-                      <p className="font-medium text-red-700">{satisfaction.nps_detractors}</p>
+                      <p className="text-ink-soft">Detractors (0–6)</p>
+                      <p className="font-medium text-flag">{satisfaction.nps_detractors}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-5">
-                <h3 className="font-medium text-slate-900 mb-3">Learner comments</h3>
+              <div className="bg-paper rounded-lg border border-rule p-5">
+                <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">Learner comments</h3>
                 <div className="space-y-3">
                   {satisfaction.comments.map((c, i) => (
                     <div key={i} className="text-sm border-b last:border-b-0 pb-3 last:pb-0">
                       {c.positive && (
-                        <p className="text-slate-700">
-                          <span className="text-emerald-700 font-medium">Liked: </span>
+                        <p className="text-ink">
+                          <span className="text-gain font-medium">Liked: </span>
                           {c.positive}
                         </p>
                       )}
                       {c.improve && (
-                        <p className="text-slate-700 mt-1">
-                          <span className="text-amber-700 font-medium">Could improve: </span>
+                        <p className="text-ink mt-1">
+                          <span className="text-amber font-medium">Could improve: </span>
                           {c.improve}
                         </p>
                       )}
-                      <p className="text-xs text-slate-400 mt-1">{new Date(c.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-sage mt-1">{new Date(c.created_at).toLocaleDateString()}</p>
                     </div>
                   ))}
-                  {satisfaction.comments.length === 0 && <p className="text-sm text-slate-500">No written comments yet.</p>}
+                  {satisfaction.comments.length === 0 && <p className="text-sm text-ink-soft">No written comments yet.</p>}
                 </div>
               </div>
             </>
@@ -548,14 +548,14 @@ export default function CohortDashboardPage() {
 
       {tab === 'reports' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow p-5">
-            <h3 className="font-medium text-slate-900 mb-3">{editingReportId ? 'Edit narrative & regenerate' : 'Generate a new report'}</h3>
+          <div className="bg-paper rounded-lg border border-rule p-5">
+            <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">{editingReportId ? 'Edit narrative & regenerate' : 'Generate a new report'}</h3>
             <div className="space-y-3">
               {!editingReportId && (
-                <label className="block text-xs text-slate-500">
+                <label className="block text-xs text-ink-soft">
                   Funder template
                   <select
-                    className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                    className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
                     value={reportTemplate}
                     onChange={(e) => setReportTemplate(e.target.value)}
                   >
@@ -568,28 +568,28 @@ export default function CohortDashboardPage() {
                   </select>
                 </label>
               )}
-              <label className="block text-xs text-slate-500">
+              <label className="block text-xs text-ink-soft">
                 Background / theory of change
                 <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
                   rows={2}
                   value={reportForm.background}
                   onChange={(e) => setReportForm({ ...reportForm, background: e.target.value })}
                 />
               </label>
-              <label className="block text-xs text-slate-500">
+              <label className="block text-xs text-ink-soft">
                 Challenges
                 <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
                   rows={2}
                   value={reportForm.challenges}
                   onChange={(e) => setReportForm({ ...reportForm, challenges: e.target.value })}
                 />
               </label>
-              <label className="block text-xs text-slate-500">
+              <label className="block text-xs text-ink-soft">
                 Next steps
                 <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-slate-700"
+                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
                   rows={2}
                   value={reportForm.next_steps}
                   onChange={(e) => setReportForm({ ...reportForm, next_steps: e.target.value })}
@@ -601,7 +601,7 @@ export default function CohortDashboardPage() {
                     <button
                       onClick={() => regenerateReportMutation.mutate(editingReportId)}
                       disabled={regenerateReportMutation.isPending}
-                      className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+                      className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
                     >
                       {regenerateReportMutation.isPending ? 'Regenerating…' : 'Save & regenerate'}
                     </button>
@@ -613,20 +613,20 @@ export default function CohortDashboardPage() {
                   <button
                     onClick={() => generateReportMutation.mutate()}
                     disabled={!reportTemplate || generateReportMutation.isPending}
-                    className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+                    className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
                   >
                     {generateReportMutation.isPending ? 'Generating…' : 'Generate report'}
                   </button>
                 )}
               </div>
-              {generateReportMutation.isError && <p className="text-xs text-red-600">{(generateReportMutation.error as Error).message}</p>}
-              {regenerateReportMutation.isError && <p className="text-xs text-red-600">{(regenerateReportMutation.error as Error).message}</p>}
+              {generateReportMutation.isError && <p className="text-xs text-flag">{(generateReportMutation.error as Error).message}</p>}
+              {regenerateReportMutation.isError && <p className="text-xs text-flag">{(regenerateReportMutation.error as Error).message}</p>}
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-paper rounded-lg border border-rule overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-ground text-left text-ink-soft">
                 <tr>
                   <th className="p-3">Template</th>
                   <th className="p-3">Generated</th>
@@ -638,17 +638,17 @@ export default function CohortDashboardPage() {
                 {reports?.map((r) => (
                   <tr key={r.id}>
                     <td className="p-3">{templates?.find((t) => t.key === r.funder_template)?.label ?? r.funder_template}</td>
-                    <td className="p-3 text-slate-500">{new Date(r.generated_at).toLocaleString()}</td>
+                    <td className="p-3 text-ink-soft">{new Date(r.generated_at).toLocaleString()}</td>
                     <td className="p-3 capitalize">{r.status}</td>
                     <td className="p-3">
                       <div className="flex gap-3">
-                        <button onClick={() => downloadReport(r.id, 'pdf')} className="text-xs text-slate-700 underline">
+                        <button onClick={() => downloadReport(r.id, 'pdf')} className="text-xs text-ink underline">
                           PDF
                         </button>
-                        <button onClick={() => downloadReport(r.id, 'docx')} className="text-xs text-slate-700 underline">
+                        <button onClick={() => downloadReport(r.id, 'docx')} className="text-xs text-ink underline">
                           Word
                         </button>
-                        <button onClick={() => startEditingReport(r)} className="text-xs text-slate-700 underline">
+                        <button onClick={() => startEditingReport(r)} className="text-xs text-ink underline">
                           Edit & regenerate
                         </button>
                       </div>
@@ -657,7 +657,7 @@ export default function CohortDashboardPage() {
                 ))}
                 {reports?.length === 0 && (
                   <tr>
-                    <td className="p-3 text-slate-500" colSpan={4}>
+                    <td className="p-3 text-ink-soft" colSpan={4}>
                       No reports generated yet for this cohort.
                     </td>
                   </tr>
@@ -685,16 +685,16 @@ function LinkCard({
   onRegenerate: () => void;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
-      <p className="text-xs text-slate-700 truncate mb-2">
+    <div className="bg-paper rounded-lg border border-rule p-4">
+      <p className="text-xs font-medium text-ink-soft mb-1">{label}</p>
+      <p className="text-xs text-ink truncate mb-2">
         {ASSESSMENT_WEB_ORIGIN}/{basePath}/{token}
       </p>
       <div className="flex gap-2">
-        <button onClick={() => onCopy(token)} className="text-xs border rounded px-2 py-1 hover:bg-slate-100">
+        <button onClick={() => onCopy(token)} className="text-xs border rounded px-2 py-1 hover:border-ink">
           Copy link
         </button>
-        <button onClick={onRegenerate} className="text-xs text-red-600 hover:underline">
+        <button onClick={onRegenerate} className="text-xs text-flag hover:underline">
           Regenerate
         </button>
       </div>
@@ -702,19 +702,21 @@ function LinkCard({
   );
 }
 
+// Figures are mono + tabular: this dashboard polls every 5s, and digits that
+// change width as it refreshes read as the layout twitching.
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-xl font-semibold text-slate-900">{value}</p>
+    <div className="bg-paper rounded-lg border border-rule px-4 py-3.5">
+      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-sage">{label}</p>
+      <p className="font-mono text-[21px] font-semibold text-ink mt-1">{value}</p>
     </div>
   );
 }
 
 function StatusBadge({ status, score }: { status: string; score: number | null }) {
-  const color = status === 'completed' ? 'bg-emerald-100 text-emerald-800' : status === 'started' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500';
+  const color = status === 'completed' ? 'bg-gain-wash text-gain' : status === 'started' ? 'bg-amber-wash text-amber' : 'bg-ground text-ink-soft';
   return (
-    <span className={`text-xs rounded-full px-2 py-1 ${color}`}>
+    <span className={`font-mono text-[11px] rounded px-2 py-1 ${color}`}>
       {status === 'completed' && score !== null ? `${score}%` : status.replace('_', ' ')}
     </span>
   );

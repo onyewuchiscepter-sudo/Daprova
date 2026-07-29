@@ -54,16 +54,16 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold text-slate-900">Team & organisation settings</h1>
+      <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink">Team & organisation settings</h1>
 
-      <div className="bg-white rounded-lg shadow p-5">
-        <h2 className="font-medium text-slate-900 mb-3">Organisation profile</h2>
+      <div className="bg-paper rounded-lg border border-rule p-5">
+        <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mb-3">Organisation profile</h2>
         <div className="grid grid-cols-2 gap-4 mb-3">
-          <label className="text-xs text-slate-500">
+          <label className="text-xs text-ink-soft">
             Name
             <input className="mt-1 block w-full border rounded px-2 py-1.5 text-sm" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
           </label>
-          <label className="text-xs text-slate-500">
+          <label className="text-xs text-ink-soft">
             Contact email
             <input
               className="mt-1 block w-full border rounded px-2 py-1.5 text-sm"
@@ -72,20 +72,20 @@ export default function TeamPage() {
             />
           </label>
         </div>
-        {profileError && <p className="text-xs text-red-600 mb-2">{profileError}</p>}
+        {profileError && <p className="text-xs text-flag mb-2">{profileError}</p>}
         <button
           onClick={() => profileMutation.mutate()}
           disabled={profileMutation.isPending}
-          className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+          className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
         >
           {profileMutation.isPending ? 'Saving…' : 'Save'}
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-5">
-        <h2 className="font-medium text-slate-900 mb-3">Invite a teammate</h2>
+      <div className="bg-paper rounded-lg border border-rule p-5">
+        <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mb-3">Invite a teammate</h2>
         <div className="flex gap-2 items-end mb-2">
-          <label className="text-xs text-slate-500 flex-1">
+          <label className="text-xs text-ink-soft flex-1">
             Email
             <input
               type="email"
@@ -94,7 +94,7 @@ export default function TeamPage() {
               onChange={(e) => setInviteEmail(e.target.value)}
             />
           </label>
-          <label className="text-xs text-slate-500">
+          <label className="text-xs text-ink-soft">
             Role
             <select
               className="mt-1 block border rounded px-2 py-1.5 text-sm"
@@ -108,18 +108,18 @@ export default function TeamPage() {
           <button
             onClick={() => inviteMutation.mutate()}
             disabled={!inviteEmail || inviteMutation.isPending}
-            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 disabled:opacity-50"
+            className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
           >
             {inviteMutation.isPending ? 'Sending…' : 'Send invite'}
           </button>
         </div>
-        {inviteError && <p className="text-xs text-red-600">{inviteError}</p>}
+        {inviteError && <p className="text-xs text-flag">{inviteError}</p>}
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <h2 className="font-medium text-slate-900 p-4 pb-0">Members</h2>
+      <div className="bg-paper rounded-lg border border-rule overflow-hidden">
+        <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink p-4 pb-0">Members</h2>
         <table className="w-full text-sm mt-3">
-          <thead className="bg-slate-50 text-left text-slate-500">
+          <thead className="bg-ground text-left text-ink-soft">
             <tr>
               <th className="p-3">Email</th>
               <th className="p-3">Name</th>
@@ -143,7 +143,7 @@ export default function TeamPage() {
                   </select>
                 </td>
                 <td className="p-3">
-                  <button onClick={() => removeMutation.mutate(m.id)} className="text-xs text-red-600 hover:underline">
+                  <button onClick={() => removeMutation.mutate(m.id)} className="text-xs text-flag hover:underline">
                     Remove
                   </button>
                 </td>
@@ -151,15 +151,15 @@ export default function TeamPage() {
             ))}
           </tbody>
         </table>
-        {roleMutation.isError && <p className="text-xs text-red-600 p-3">{(roleMutation.error as Error).message}</p>}
-        {removeMutation.isError && <p className="text-xs text-red-600 p-3">{(removeMutation.error as Error).message}</p>}
+        {roleMutation.isError && <p className="text-xs text-flag p-3">{(roleMutation.error as Error).message}</p>}
+        {removeMutation.isError && <p className="text-xs text-flag p-3">{(removeMutation.error as Error).message}</p>}
       </div>
 
       {!!data?.pending_invites.length && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <h2 className="font-medium text-slate-900 p-4 pb-0">Pending invites</h2>
+        <div className="bg-paper rounded-lg border border-rule overflow-hidden">
+          <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink p-4 pb-0">Pending invites</h2>
           <table className="w-full text-sm mt-3">
-            <thead className="bg-slate-50 text-left text-slate-500">
+            <thead className="bg-ground text-left text-ink-soft">
               <tr>
                 <th className="p-3">Email</th>
                 <th className="p-3">Role</th>
@@ -171,7 +171,7 @@ export default function TeamPage() {
                 <tr key={i.id}>
                   <td className="p-3">{i.email}</td>
                   <td className="p-3 capitalize">{i.role}</td>
-                  <td className="p-3 text-slate-500">{new Date(i.expires_at).toLocaleDateString()}</td>
+                  <td className="p-3 text-ink-soft">{new Date(i.expires_at).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>

@@ -62,8 +62,8 @@ export default function NewCoursePage() {
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900 mb-1">New Course</h1>
-      <p className="text-sm text-slate-500 mb-6">A course is one program — its own competency areas and questions, its own cohorts.</p>
+      <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink mb-1">New Course</h1>
+      <p className="text-sm text-ink-soft mb-6">A course is one program — its own competency areas and questions, its own cohorts.</p>
 
       <div className="flex gap-4 border-b mb-6">
         {(
@@ -76,7 +76,7 @@ export default function NewCoursePage() {
           <button
             key={value}
             onClick={() => setMode(value)}
-            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${mode === value ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500'}`}
+            className={`pb-2 text-sm font-medium border-b-2 -mb-px ${mode === value ? 'border-gain text-ink' : 'border-transparent text-ink-soft'}`}
           >
             {label}
           </button>
@@ -85,7 +85,7 @@ export default function NewCoursePage() {
 
       {mode === 'template' && (
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <p className="col-span-2 text-xs text-slate-400">
+          <p className="col-span-2 text-xs text-sage">
             Looking for a whole curriculum instead of one course?{' '}
             <Link to="/frameworks/import" className="underline">
               Import a framework template
@@ -100,11 +100,11 @@ export default function NewCoursePage() {
                 if (!name) setName(t.name);
               }}
               className={`text-left rounded-lg border p-4 transition-colors ${
-                templateId === t.id ? 'border-slate-900 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-400'
+                templateId === t.id ? 'border-gain bg-gain-wash' : 'border-rule bg-paper hover:border-ink'
               }`}
             >
-              <p className="font-medium text-slate-900">{t.name}</p>
-              <p className="text-xs text-slate-500">{t.area_count} competency areas</p>
+              <p className="font-medium text-ink">{t.name}</p>
+              <p className="text-xs text-ink-soft">{t.area_count} competency areas</p>
             </button>
           ))}
         </div>
@@ -112,7 +112,7 @@ export default function NewCoursePage() {
 
       {mode === 'existing' && (
         <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-700 max-w-md">
+          <label className="block text-sm font-medium text-ink max-w-md">
             Framework
             <select className="mt-1 w-full border rounded px-3 py-2" value={frameworkId} onChange={(e) => setFrameworkId(e.target.value)}>
               <option value="">Select a framework…</option>
@@ -122,20 +122,20 @@ export default function NewCoursePage() {
                 </option>
               ))}
             </select>
-            <span className="block mt-1 text-xs text-slate-400">
+            <span className="block mt-1 text-xs text-sage">
               This course starts with no competency areas of its own — add them on the next screen.
             </span>
           </label>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow p-6 max-w-md space-y-4">
-        <label className="block text-sm font-medium text-slate-700">
+      <div className="bg-paper rounded-lg border border-rule p-6 max-w-md space-y-4">
+        <label className="block text-sm font-medium text-ink">
           Course name
           <input className="mt-1 w-full border rounded px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         {mode === 'scratch' && (
-          <label className="block text-sm font-medium text-slate-700">
+          <label className="block text-sm font-medium text-ink">
             Category
             <select className="mt-1 w-full border rounded px-3 py-2" value={category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORIES.map((c) => (
@@ -144,14 +144,14 @@ export default function NewCoursePage() {
                 </option>
               ))}
             </select>
-            <span className="block mt-1 text-xs text-slate-400">You'll add competency areas and questions on the next screen.</span>
+            <span className="block mt-1 text-xs text-sage">You'll add competency areas and questions on the next screen.</span>
           </label>
         )}
-        {createMutation.isError && <p className="text-sm text-red-600">{(createMutation.error as Error).message}</p>}
+        {createMutation.isError && <p className="text-sm text-flag">{(createMutation.error as Error).message}</p>}
         <button
           onClick={() => createMutation.mutate()}
           disabled={!valid || createMutation.isPending}
-          className="bg-slate-900 text-white text-sm rounded px-4 py-2 disabled:opacity-50"
+          className="bg-gain text-white text-sm rounded px-4 py-2 disabled:opacity-50"
         >
           {createMutation.isPending ? 'Creating…' : 'Create course'}
         </button>
