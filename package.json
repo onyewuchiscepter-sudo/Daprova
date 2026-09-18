@@ -26,5 +26,9 @@
   },
   "overrides": {
     "iconv-lite": "^0.6.3"
+  },
+  "dependencies": {
+    "@neon/config": "^1.7.2",
+    "@neon/env": "^1.4.3"
   }
 }
