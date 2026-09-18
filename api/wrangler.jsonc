@@ -12,7 +12,7 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "REPLACE_WITH_HYPERDRIVE_ID",
+      "id": "ae45804478a24181bdddeaea5bb2bb7d",
       "localConnectionString": "postgres://postgres:postgres@localhost:5432/daprova_dev"
     }
   ],
@@ -32,7 +32,7 @@
   // `npx wrangler secret put <NAME>`, never here.
   "vars": {
     "NODE_ENV": "production",
-    "FIREBASE_PROJECT_ID": "daprova-dev",
+    "FIREBASE_PROJECT_ID": "daprova-a5edb",
     "INVITE_FROM_EMAIL": "onboarding@daprova.com",
     "COOKIE_SAMESITE": "none",
     "ADMIN_DASHBOARD_ORIGIN": "https://daprova-admin.pages.dev",
