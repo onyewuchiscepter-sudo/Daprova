@@ -23,6 +23,9 @@ import { runMigrationsToLatest } from './db/migrate.js';
 import { reconcilePendingPayments } from './services/paymentService.js';
 
 const app = express();
+if (env.trustProxy) {
+  app.set('trust proxy', /^\d+$/.test(env.trustProxy) ? Number(env.trustProxy) : env.trustProxy === 'true');
+}
 
 const allowedOrigins = new Set([env.adminDashboardOrigin, env.assessmentWebOrigin, env.platformWebOrigin]);
 app.use(

@@ -1,0 +1,4 @@
+# Learner links are /assess/:token and /satisfaction/:token — the token isn't a
+# file, so serve the app shell and let app.js read it from the path.
+/assess/*        /index.html  200
+/satisfaction/*  /index.html  200

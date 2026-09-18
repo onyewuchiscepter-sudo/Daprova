@@ -9,6 +9,14 @@ import react from '@vitejs/plugin-react';
 // CORS are still the actual access control.
 const port = Number(process.env.PORT) || 5173;
 
+// On a Cloudflare Pages build, a missing var would otherwise ship a bundle
+// that silently calls localhost:4001 and the Firebase emulator.
+if (process.env.CF_PAGES) {
+  for (const name of ['VITE_API_BASE', 'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID', 'VITE_ASSESSMENT_WEB_ORIGIN']) {
+    if (!process.env[name]) throw new Error(`${name} must be set in the Cloudflare Pages build environment.`);
+  }
+}
+
 export default defineConfig({
   plugins: [react()],
   server: { port, host: true },

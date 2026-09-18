@@ -196,7 +196,7 @@ authRouter.post('/logout', async (req, res, next) => {
         // already invalid/expired — nothing to revoke
       }
     }
-    res.clearCookie(REFRESH_COOKIE, { path: cookieOpts.path });
+    res.clearCookie(REFRESH_COOKIE, cookieOpts);
     res.status(204).send();
   } catch (err) {
     next(err);

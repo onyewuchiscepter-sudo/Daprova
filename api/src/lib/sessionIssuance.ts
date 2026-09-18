@@ -1,3 +1,4 @@
+import { env } from '../env.js';
 import { db } from '../db/index.js';
 import { notFound, forbidden } from './errors.js';
 import { newRefreshJti, signRefreshToken, signSessionToken, REFRESH_TOKEN_TTL_MS } from './sessionTokens.js';
@@ -5,8 +6,9 @@ import { newRefreshJti, signRefreshToken, signSessionToken, REFRESH_TOKEN_TTL_MS
 export const REFRESH_COOKIE = 'daprova_refresh';
 export const refreshCookieOpts = {
   httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  sameSite: env.cookieSameSite,
+  // Browsers reject SameSite=None cookies that aren't also Secure.
+  secure: env.nodeEnv === 'production' || env.cookieSameSite === 'none',
   path: '/api/v1/auth',
 };
 
