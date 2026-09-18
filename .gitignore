@@ -12,3 +12,5 @@ ui-debug.log
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 *.tsbuildinfo
+.wrangler/
+.dev.vars*

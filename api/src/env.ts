@@ -45,7 +45,7 @@ export const env = {
   // The refresh cookie defaults to SameSite=Lax, which only works when the
   // frontends and the api share a registrable domain (app.daprova.com +
   // api.daprova.com). On split hosting domains (e.g. *.pages.dev frontends
-  // calling *.onrender.com) the browser drops a Lax cookie on every fetch,
+  // calling a *.workers.dev api) the browser drops a Lax cookie on every fetch,
   // so session restore silently fails — set COOKIE_SAMESITE=none there.
   cookieSameSite: (process.env.COOKIE_SAMESITE === 'none' ? 'none' : 'lax') as 'none' | 'lax',
   // Express 'trust proxy' setting, so req.ip is the real client behind the

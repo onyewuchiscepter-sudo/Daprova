@@ -21,6 +21,10 @@
   "allowScripts": {
     "esbuild@0.28.1": true,
     "esbuild@0.21.5": true,
-    "protobufjs@7.6.4": true
+    "protobufjs@7.6.4": true,
+    "workerd@1.20260917.1": true
+  },
+  "overrides": {
+    "iconv-lite": "^0.6.3"
   }
 }

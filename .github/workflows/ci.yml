@@ -16,3 +16,4 @@ jobs:
       - run: npm install
       - run: npm run build --workspace=api
       - run: npm run build --workspace=admin-web
+      - run: npm run check:worker --workspace=api

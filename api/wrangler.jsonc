@@ -1,0 +1,42 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "daprova-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Postgres (Neon) via Hyperdrive. Create it once with
+  //   npx wrangler hyperdrive create daprova-db --connection-string="<neon direct URL>"
+  // and paste the id it prints here. "localConnectionString" is what
+  // `wrangler dev` uses instead.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "REPLACE_WITH_HYPERDRIVE_ID",
+      "localConnectionString": "postgres://postgres:postgres@localhost:5432/daprova_dev"
+    }
+  ],
+
+  // Payment reconciliation (index.ts runs this on a 60s setInterval on Node).
+  "triggers": { "crons": ["* * * * *"] },
+
+  // See src/worker/fsShim.ts — pdfkit's data files, served from the bundle.
+  "alias": { "fs": "./src/worker/fsShim.ts" },
+  "rules": [{ "type": "Data", "globs": ["**/*.afm", "**/*.trie"], "fallthrough": true }],
+  "define": { "__dirname": "\"/bundle\"" },
+
+  "observability": { "enabled": true },
+
+  // Non-secret config. Secrets (SESSION_JWT_SECRET, REFRESH_JWT_SECRET,
+  // FIREBASE_API_KEY, RESEND_API_KEY, BOOTSTRAP_SECRET) are set with
+  // `npx wrangler secret put <NAME>`, never here.
+  "vars": {
+    "NODE_ENV": "production",
+    "FIREBASE_PROJECT_ID": "daprova-dev",
+    "INVITE_FROM_EMAIL": "onboarding@daprova.com",
+    "COOKIE_SAMESITE": "none",
+    "ADMIN_DASHBOARD_ORIGIN": "https://daprova-admin.pages.dev",
+    "ASSESSMENT_WEB_ORIGIN": "https://daprova-assess.pages.dev",
+    "PLATFORM_WEB_ORIGIN": "https://daprova-platform.pages.dev"
+  }
+}
