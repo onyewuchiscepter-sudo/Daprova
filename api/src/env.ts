@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { IS_WORKERS } from './lib/runtime.js';
 
 function required(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -55,13 +56,20 @@ export const env = {
   trustProxy: process.env.TRUST_PROXY,
 };
 
-// Fail fast rather than silently run production traffic on known dev secrets
-// or against the emulator.
-if (env.nodeEnv === 'production') {
+// Never serve production traffic on known dev secrets or against the emulator.
+export function productionConfigProblem(): string | null {
+  if (env.nodeEnv !== 'production') return null;
   if (env.sessionJwtSecret === DEV_SESSION_SECRET || env.refreshJwtSecret === DEV_REFRESH_SECRET) {
-    throw new Error('Refusing to start in production with default dev JWT secrets — set SESSION_JWT_SECRET and REFRESH_JWT_SECRET.');
+    return 'Refusing to start in production with default dev JWT secrets — set SESSION_JWT_SECRET and REFRESH_JWT_SECRET.';
   }
-  if (env.firebaseAuthEmulatorHost) {
-    throw new Error('FIREBASE_AUTH_EMULATOR_HOST must not be set in production.');
-  }
+  if (env.firebaseAuthEmulatorHost) return 'FIREBASE_AUTH_EMULATOR_HOST must not be set in production.';
+  return null;
+}
+
+// On Node, fail at boot. On Workers a throw here would make Cloudflare reject
+// the upload itself — before secrets can be attached to a never-deployed
+// Worker — so worker.ts checks per request instead and answers 500.
+if (!IS_WORKERS) {
+  const problem = productionConfigProblem();
+  if (problem) throw new Error(problem);
 }

@@ -8,7 +8,7 @@ you go:
 |---|---|---|
 | Neon unpooled URL | `DATABASE_URL_UNPOOLED` in `.env.local` | |
 | Hyperdrive ID | Part 2 | |
-| API URL | Part 3, e.g. `https://daprova-api.<subdomain>.workers.dev` | |
+| API URL | Part 3, e.g. `https://daprova.<subdomain>.workers.dev` | |
 | Admin URL | Part 5, e.g. `https://daprova-admin.pages.dev` | |
 | Assessment URL | Part 5, e.g. `https://daprova-assess.pages.dev` | |
 | Platform URL | Part 5, e.g. `https://daprova-platform.pages.dev` | |
@@ -19,7 +19,7 @@ you go:
 |---|---|---|
 | Postgres + object storage | Neon project `empty-tree-79951483`, branch `production` | — |
 | DB connection pooling | Cloudflare Hyperdrive | — |
-| API (`api/`) | Cloudflare Worker `daprova-api` | ✅ Workers Builds |
+| API (`api/`) | Cloudflare Worker `daprova` | ✅ Workers Builds |
 | `admin-web`, `assessment-web`, `platform-web` | 3 Cloudflare Pages projects | ✅ Pages |
 
 > **Plan:** use **Workers Paid** ($5/month). The Free plan allows 10 ms of CPU
@@ -81,7 +81,7 @@ you go:
 
    | Field | Value |
    |---|---|
-   | Project name | `daprova-api` (must match `name` in `api/wrangler.jsonc`) |
+   | Project name | `daprova` (must match `name` in `api/wrangler.jsonc`) |
    | Production branch | `main` |
    | Build command | *(leave empty)* |
    | Deploy command | `npm run deploy --workspace=api` |
@@ -92,7 +92,7 @@ you go:
    **unpooled** URL, and tick **Encrypt**. The deploy command uses it to run
    the database migrations before publishing.
 5. Click **Deploy**. In the build log you should see `[migrate] Success: 0001_init`
-   … `0016_…`, then `Deployed daprova-api`. If Cloudflare asks you to pick a
+   … `0016_…`, then `Deployed daprova`. If Cloudflare asks you to pick a
    `workers.dev` subdomain, choose one.
 6. **Add secrets.** Open the Worker → **Settings → Variables and Secrets →
    Add**. For each row below, set **Type: Secret**, then **Deploy**:
@@ -205,7 +205,7 @@ Without this, login fails silently.
    in:
 
    ```bash
-   API=https://daprova-api.<subdomain>.workers.dev
+   API=https://daprova.<subdomain>.workers.dev
    SECRET=<BOOTSTRAP_SECRET>
 
    # Competency framework templates (safe to re-run)

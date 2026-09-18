@@ -7,6 +7,7 @@
 // - Each request/cron run gets its own DB pool via withRequestDb().
 import { handleAsNodeRequest } from 'cloudflare:node';
 import { app } from './app.js';
+import { productionConfigProblem } from './env.js';
 import { withRequestDb } from './db/index.js';
 import { reconcilePendingPayments } from './services/paymentService.js';
 
@@ -20,6 +21,11 @@ app.listen(PORT);
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const problem = productionConfigProblem();
+    if (problem) {
+      console.error(`[daprova-api] ${problem}`);
+      return Response.json({ error: { code: 'MISCONFIGURED', message: problem } }, { status: 500 });
+    }
     return withRequestDb(env.HYPERDRIVE.connectionString, () => handleAsNodeRequest(PORT, request, env, ctx));
   },
 
