@@ -32,7 +32,9 @@ authRouter.post('/verify', async (req, res, next) => {
     if (!header?.startsWith('Bearer ')) throw unauthorized('Missing Firebase ID token');
     const idToken = header.slice('Bearer '.length);
 
-    const decoded = await firebaseAuth.verifyIdToken(idToken).catch(() => {
+    const decoded = await firebaseAuth.verifyIdToken(idToken).catch((err: unknown) => {
+      // The reason (expired, wrong audience, key fetch failed, ...) — never the token itself.
+      console.warn('[auth/verify] Firebase ID token rejected:', (err as { code?: string })?.code ?? (err as Error)?.message ?? err);
       throw unauthorized('Invalid Firebase ID token');
     });
 
