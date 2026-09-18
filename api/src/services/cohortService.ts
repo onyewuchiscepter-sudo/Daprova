@@ -105,6 +105,19 @@ export async function listCohorts(orgId: string, courseId: string) {
     .execute();
 }
 
+// Every cohort in the org across all its courses, for the top-level Cohorts page.
+export async function listOrgCohorts(orgId: string) {
+  return db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.created_at', 'courses.id as course_id', 'courses.name as course_name'])
+    .where('courses.org_id', '=', orgId)
+    .where('courses.deleted_at', 'is', null)
+    .where('cohorts.deleted_at', 'is', null)
+    .orderBy('cohorts.created_at', 'desc')
+    .execute();
+}
+
 async function assertCohortOwnership(orgId: string, cohortId: string) {
   const cohort = await db
     .selectFrom('cohorts')

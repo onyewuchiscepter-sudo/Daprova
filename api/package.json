@@ -13,7 +13,8 @@
     "seed:synthetic": "tsx src/db/seed/syntheticDataset.ts",
     "dev:worker": "wrangler dev",
     "check:worker": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
-    "deploy": "tsx src/db/migrate.ts up && wrangler deploy"
+    "deploy": "tsx src/db/migrate.ts up && wrangler deploy",
+    "seed:templates": "tsx src/db/seed/templatesOnly.ts"
   },
   "dependencies": {
     "@daprova/shared": "*",

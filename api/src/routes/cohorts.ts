@@ -20,6 +20,14 @@ function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {
   return result.data;
 }
 
+cohortsRouter.get('/', async (req, res, next) => {
+  try {
+    res.json(await cohortService.listOrgCohorts(req.auth!.org_id!));
+  } catch (err) {
+    next(err);
+  }
+});
+
 cohortsRouter.get('/:id', async (req, res, next) => {
   try {
     res.json(await cohortService.getCohort(req.auth!.org_id!, req.params.id));

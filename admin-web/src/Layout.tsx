@@ -3,6 +3,7 @@ import { useAuth } from './auth';
 
 const NAV = [
   { to: '/courses', label: 'Courses' },
+  { to: '/cohorts', label: 'Cohorts' },
   { to: '/frameworks', label: 'Frameworks' },
   { to: '/team', label: 'Team' },
 ];

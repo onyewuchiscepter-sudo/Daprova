@@ -12,6 +12,7 @@ import CoursesListPage from './pages/CoursesListPage';
 import NewCoursePage from './pages/NewCoursePage';
 import CourseDetailPage from './pages/CourseDetailPage';
 import CohortDashboardPage from './pages/CohortDashboardPage';
+import CohortsListPage from './pages/CohortsListPage';
 import TeamPage from './pages/TeamPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ImpersonatePage from './pages/ImpersonatePage';
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route path="/courses" element={<CoursesListPage />} />
         <Route path="/courses/new" element={<NewCoursePage />} />
         <Route path="/courses/:id" element={<CourseDetailPage />} />
+        <Route path="/cohorts" element={<CohortsListPage />} />
         <Route path="/cohorts/:id" element={<CohortDashboardPage />} />
         <Route path="/team" element={<TeamPage />} />
       </Route>
