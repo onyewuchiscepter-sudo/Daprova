@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/rbac.js';
 import { requireVerified } from '../middleware/orgVerification.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import * as orgTeamService from '../services/orgTeamService.js';
+import * as insightsService from '../services/insightsService.js';
 import { orgLogoPath, parseBrandColor, parseLogoDataUrl } from '../lib/branding.js';
 import { sql } from 'kysely';
 
@@ -93,6 +94,16 @@ orgRouter.patch('/org', requireAuth, requireRole('admin'), requireVerified, asyn
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
     const org = await orgTeamService.updateOrgProfile(req.auth!.org_id!, body.data);
     res.json({ id: org.id, name: org.name, slug: org.slug, logo_url: org.logo_url, contact_email: org.contact_email });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/org/overview — the home dashboard: totals across every
+// cohort, per-cohort numbers, and what needs attention.
+orgRouter.get('/org/overview', requireAuth, async (req, res, next) => {
+  try {
+    res.json(await insightsService.orgOverview(req.auth!.org_id!));
   } catch (err) {
     next(err);
   }

@@ -226,6 +226,8 @@ async function cloneAreasAndQuestions(sourceCourseId: string, targetCourseId: st
             correct_option: q.correct_option,
             assessment_type: q.assessment_type,
             is_active: q.is_active,
+            question_type: q.question_type,
+            scenario_text: q.scenario_text,
           })),
         )
         .execute();
@@ -375,52 +377,108 @@ export async function deactivateArea(orgId: string, courseId: string, areaId: st
 
 export type QuestionOption = 'a' | 'b' | 'c' | 'd';
 export type QuestionAssessmentType = 'pre' | 'post' | 'both';
+export type QuestionType = 'mcq' | 'true_false' | 'scenario' | 'self_rating';
+export const QUESTION_TYPES: QuestionType[] = ['mcq', 'true_false', 'scenario', 'self_rating'];
 
-export async function createQuestion(
-  orgId: string,
-  courseId: string,
-  areaId: string,
-  opts: {
-    question_text: string;
-    option_a: string;
-    option_b: string;
-    option_c: string;
-    option_d: string;
-    correct_option: QuestionOption;
-    assessment_type?: QuestionAssessmentType;
-  },
-) {
+export type QuestionFields = {
+  question_type?: QuestionType;
+  question_text: string;
+  scenario_text?: string | null;
+  option_a?: string | null;
+  option_b?: string | null;
+  option_c?: string | null;
+  option_d?: string | null;
+  correct_option?: string | null;
+};
+
+// One place that knows each question type's shape, so the create, update,
+// CSV and bank-import paths can't drift apart:
+// - mcq: four options, one correct (a-d)
+// - scenario: a situation to read first, then four options, one correct
+// - true_false: two options (default "True"/"False"), correct a or b
+// - self_rating: the learner rates themselves 1-5 — no correct answer,
+//   never scored (see assessmentService.recordResponses); option_a/option_b
+//   hold the labels for the two ends of the scale
+
+// Returns the columns to store, or a list of problems.
+type NormalizedQuestion = Required<QuestionFields> & { option_a: string; option_b: string };
+
+export function normalizeQuestion(input: QuestionFields): { value?: NormalizedQuestion; errors: string[] } {
+  const type = input.question_type ?? 'mcq';
+  const errors: string[] = [];
+  const text = input.question_text?.trim();
+  if (!text) errors.push('question_text is required');
+  if (!QUESTION_TYPES.includes(type)) return { errors: [`question_type must be one of ${QUESTION_TYPES.join(', ')}`] };
+
+  const opt = (v: string | null | undefined) => (v ?? '').trim();
+  const correct = opt(input.correct_option).toLowerCase();
+
+  if (type === 'self_rating') {
+    if (errors.length) return { errors };
+    return {
+      value: {
+        question_type: type,
+        question_text: text!,
+        scenario_text: null,
+        option_a: opt(input.option_a) || 'Not confident',
+        option_b: opt(input.option_b) || 'Very confident',
+        option_c: null,
+        option_d: null,
+        correct_option: null,
+      },
+      errors,
+    };
+  }
+
+  if (type === 'true_false') {
+    if (!['a', 'b'].includes(correct)) errors.push('correct_option must be a (first option) or b (second option)');
+    if (errors.length) return { errors };
+    return {
+      value: { question_type: type, question_text: text!, scenario_text: null, option_a: opt(input.option_a) || 'True', option_b: opt(input.option_b) || 'False', option_c: null, option_d: null, correct_option: correct },
+      errors,
+    };
+  }
+
+  const scenario = opt(input.scenario_text);
+  if (type === 'scenario' && !scenario) errors.push('scenario_text is required for a scenario question');
+  for (const k of ['option_a', 'option_b', 'option_c', 'option_d'] as const) if (!opt(input[k])) errors.push(`${k} is required`);
+  if (!['a', 'b', 'c', 'd'].includes(correct)) errors.push('correct_option must be a, b, c, or d');
+  if (errors.length) return { errors };
+  return {
+    value: {
+      question_type: type,
+      question_text: text!,
+      scenario_text: type === 'scenario' ? scenario : null,
+      option_a: opt(input.option_a),
+      option_b: opt(input.option_b),
+      option_c: opt(input.option_c),
+      option_d: opt(input.option_d),
+      correct_option: correct,
+    },
+    errors,
+  };
+}
+
+export async function createQuestion(orgId: string, courseId: string, areaId: string, opts: QuestionFields & { assessment_type?: QuestionAssessmentType }) {
   const course = await assertCourseOwnership(orgId, courseId);
   await assertNotLocked(course);
   await assertAreaOwnership(courseId, areaId);
 
+  const { value, errors } = normalizeQuestion(opts);
+  if (!value) throw badRequest(errors.join('; '), { errors });
+
   return db
     .insertInto('questions')
-    .values({
-      area_id: areaId,
-      question_text: opts.question_text,
-      option_a: opts.option_a,
-      option_b: opts.option_b,
-      option_c: opts.option_c,
-      option_d: opts.option_d,
-      correct_option: opts.correct_option,
-      assessment_type: opts.assessment_type ?? 'both',
-    })
+    .values({ area_id: areaId, ...value, assessment_type: opts.assessment_type ?? 'both' })
     .returningAll()
     .executeTakeFirstOrThrow();
 }
 
-const REQUIRED_CSV_COLUMNS = ['question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option'] as const;
+// question_type (mcq | true_false | scenario | self_rating) and scenario_text
+// are optional columns; a missing question_type means mcq.
+const REQUIRED_CSV_COLUMNS = ['question_text'] as const;
 
-type ParsedQuestion = {
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_option: QuestionOption;
-  assessment_type: QuestionAssessmentType;
-};
+type ParsedQuestion = NormalizedQuestion & { assessment_type: QuestionAssessmentType };
 
 // All-or-nothing by design: reporting "row 12 has an invalid correct_option"
 // and inserting nothing is easier for an admin to fix and re-upload than a
@@ -444,37 +502,28 @@ function parseQuestionsCsv(csvText: string): { questions: ParsedQuestion[]; erro
     if (row.every((cell) => cell.trim() === '')) continue; // skip blank rows
     const rowNum = r + 1; // 1-indexed, matches what a spreadsheet app shows (header is row 1)
 
-    const question_text = row[colIndex('question_text')]?.trim();
-    const option_a = row[colIndex('option_a')]?.trim();
-    const option_b = row[colIndex('option_b')]?.trim();
-    const option_c = row[colIndex('option_c')]?.trim();
-    const option_d = row[colIndex('option_d')]?.trim();
-    const correctRaw = row[colIndex('correct_option')]?.trim().toLowerCase();
+    const cell = (name: string) => (colIndex(name) === -1 ? undefined : row[colIndex(name)]?.trim());
     const assessmentRaw = assessmentTypeCol !== -1 ? row[assessmentTypeCol]?.trim().toLowerCase() : 'both';
+    const typeRaw = (cell('question_type') || 'mcq').toLowerCase().replace(/[\s/-]+/g, '_');
 
-    const rowErrors: string[] = [];
-    if (!question_text) rowErrors.push('question_text is required');
-    if (!option_a) rowErrors.push('option_a is required');
-    if (!option_b) rowErrors.push('option_b is required');
-    if (!option_c) rowErrors.push('option_c is required');
-    if (!option_d) rowErrors.push('option_d is required');
-    if (!correctRaw || !['a', 'b', 'c', 'd'].includes(correctRaw)) rowErrors.push('correct_option must be a, b, c, or d');
+    const { value, errors: rowErrors } = normalizeQuestion({
+      question_type: typeRaw as QuestionType,
+      question_text: cell('question_text') ?? '',
+      scenario_text: cell('scenario_text'),
+      option_a: cell('option_a'),
+      option_b: cell('option_b'),
+      option_c: cell('option_c'),
+      option_d: cell('option_d'),
+      correct_option: cell('correct_option'),
+    });
     if (assessmentRaw && !['pre', 'post', 'both'].includes(assessmentRaw)) rowErrors.push('assessment_type must be pre, post, or both');
 
-    if (rowErrors.length > 0) {
+    if (!value || rowErrors.length > 0) {
       errors.push(`Row ${rowNum}: ${rowErrors.join('; ')}`);
       continue;
     }
 
-    questions.push({
-      question_text: question_text!,
-      option_a: option_a!,
-      option_b: option_b!,
-      option_c: option_c!,
-      option_d: option_d!,
-      correct_option: correctRaw as QuestionOption,
-      assessment_type: (assessmentRaw || 'both') as QuestionAssessmentType,
-    });
+    questions.push({ ...value, assessment_type: (assessmentRaw || 'both') as QuestionAssessmentType });
   }
 
   return { questions, errors };
@@ -505,16 +554,7 @@ export async function updateQuestion(
   orgId: string,
   courseId: string,
   questionId: string,
-  opts: {
-    question_text?: string;
-    option_a?: string;
-    option_b?: string;
-    option_c?: string;
-    option_d?: string;
-    correct_option?: QuestionOption;
-    assessment_type?: QuestionAssessmentType;
-    is_active?: boolean;
-  },
+  opts: Partial<QuestionFields> & { assessment_type?: QuestionAssessmentType; is_active?: boolean },
 ) {
   const course = await assertCourseOwnership(orgId, courseId);
   await assertNotLocked(course);
@@ -528,13 +568,28 @@ export async function updateQuestion(
     .executeTakeFirst();
   if (!question) throw notFound('Question not found');
 
+  // Changing any content field re-validates the question as a whole (e.g.
+  // switching to true/false clears options c and d).
+  const touchesContent = (['question_type', 'question_text', 'scenario_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option'] as const).some(
+    (k) => opts[k] !== undefined,
+  );
+  let content = {};
+  if (touchesContent) {
+    const { value, errors } = normalizeQuestion({
+      question_type: (opts.question_type ?? question.question_type) as QuestionType,
+      question_text: opts.question_text ?? question.question_text,
+      scenario_text: opts.scenario_text !== undefined ? opts.scenario_text : question.scenario_text,
+      option_a: opts.option_a !== undefined ? opts.option_a : question.option_a,
+      option_b: opts.option_b !== undefined ? opts.option_b : question.option_b,
+      option_c: opts.option_c !== undefined ? opts.option_c : question.option_c,
+      option_d: opts.option_d !== undefined ? opts.option_d : question.option_d,
+      correct_option: opts.correct_option !== undefined ? opts.correct_option : question.correct_option,
+    });
+    if (!value) throw badRequest(errors.join('; '), { errors });
+    content = value;
+  }
   const patch = {
-    ...(opts.question_text !== undefined && { question_text: opts.question_text }),
-    ...(opts.option_a !== undefined && { option_a: opts.option_a }),
-    ...(opts.option_b !== undefined && { option_b: opts.option_b }),
-    ...(opts.option_c !== undefined && { option_c: opts.option_c }),
-    ...(opts.option_d !== undefined && { option_d: opts.option_d }),
-    ...(opts.correct_option !== undefined && { correct_option: opts.correct_option }),
+    ...content,
     ...(opts.assessment_type !== undefined && { assessment_type: opts.assessment_type }),
     ...(opts.is_active !== undefined && { is_active: opts.is_active }),
   };
@@ -551,4 +606,72 @@ export async function updateQuestion(
     .executeTakeFirstOrThrow();
 
   return { warning: Number(activeCount.count) < 8 };
+}
+
+// ---------------------------------------------------------------------------
+// Question bank: search every question the org has already written (across
+// all its courses) plus Daprova's template questions, and copy chosen ones
+// into an area — so good questions get reused instead of retyped.
+
+export async function searchQuestionBank(orgId: string, opts: { q?: string; type?: string; limit?: number }) {
+  let query = db
+    .selectFrom('questions as q')
+    .innerJoin('competency_areas as a', 'a.id', 'q.area_id')
+    .innerJoin('courses as c', 'c.id', 'a.course_id')
+    .select([
+      'q.id',
+      'q.question_type',
+      'q.question_text',
+      'q.scenario_text',
+      'q.option_a',
+      'q.option_b',
+      'q.option_c',
+      'q.option_d',
+      'q.correct_option',
+      'a.name as area_name',
+      'c.name as course_name',
+      'c.is_template',
+    ])
+    .where((eb) => eb.or([eb('c.org_id', '=', orgId), eb('c.is_template', '=', true)]))
+    .where('c.deleted_at', 'is', null)
+    .where('q.is_active', '=', true);
+  const term = opts.q?.trim();
+  if (term) query = query.where((eb) => eb.or([eb('q.question_text', 'ilike', `%${term}%`), eb('a.name', 'ilike', `%${term}%`), eb('c.name', 'ilike', `%${term}%`)]));
+  if (opts.type && QUESTION_TYPES.includes(opts.type as QuestionType)) query = query.where('q.question_type', '=', opts.type);
+  const rows = await query
+    .orderBy('c.is_template')
+    .orderBy('q.created_at', 'desc')
+    .limit(Math.min(opts.limit ?? 50, 100))
+    .execute();
+  // The same template question appears once per org clone; show it once.
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const key = `${r.question_type}|${r.question_text}|${r.option_a}|${r.correct_option}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export async function importQuestionsFromBank(orgId: string, courseId: string, areaId: string, questionIds: string[]) {
+  const course = await assertCourseOwnership(orgId, courseId);
+  await assertNotLocked(course);
+  await assertAreaOwnership(courseId, areaId);
+  if (!questionIds.length) throw badRequest('Choose at least one question');
+
+  const source = await db
+    .selectFrom('questions as q')
+    .innerJoin('competency_areas as a', 'a.id', 'q.area_id')
+    .innerJoin('courses as c', 'c.id', 'a.course_id')
+    .select(['q.question_type', 'q.question_text', 'q.scenario_text', 'q.option_a', 'q.option_b', 'q.option_c', 'q.option_d', 'q.correct_option', 'q.assessment_type'])
+    .where('q.id', 'in', questionIds)
+    .where((eb) => eb.or([eb('c.org_id', '=', orgId), eb('c.is_template', '=', true)]))
+    .execute();
+  if (source.length !== new Set(questionIds).size) throw notFound('Some of those questions were not found');
+
+  await db
+    .insertInto('questions')
+    .values(source.map((q) => ({ area_id: areaId, ...q })))
+    .execute();
+  return { imported: source.length };
 }

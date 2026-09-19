@@ -3,6 +3,7 @@ import { useAuth } from './auth';
 import { DaprovaMark } from './components/Logo';
 
 const NAV = [
+  { to: '/home', label: 'Home' },
   { to: '/courses', label: 'Courses' },
   { to: '/cohorts', label: 'Cohorts' },
   { to: '/frameworks', label: 'Frameworks' },

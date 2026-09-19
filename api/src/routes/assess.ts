@@ -2,8 +2,19 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { badRequest } from '../lib/errors.js';
 import * as assessmentService from '../services/assessmentService.js';
+import * as certificateService from '../services/certificateService.js';
 
 export const assessRouter = Router();
+
+// Which kind of link this is (pre / post / satisfaction / tracer), whose
+// programme, and branding — the first thing every learner page loads.
+assessRouter.get('/:cohortToken/info', async (req, res, next) => {
+  try {
+    res.json(await assessmentService.getLinkInfo(req.params.cohortToken));
+  } catch (err) {
+    next(err);
+  }
+});
 
 function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -32,6 +43,13 @@ const startSchema = z
       .optional(),
     display_name: z.string().min(1).optional(),
     enrolment_id: z.string().min(1).optional(),
+    email: z.string().email().max(255).optional(),
+    phone: z
+      .string()
+      .max(30)
+      .regex(/^\+?[0-9 ()-]{7,}$/, 'Enter a valid phone number')
+      .optional(),
+    contact_consent: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.learner_token) return;
@@ -51,14 +69,17 @@ assessRouter.post('/:cohortToken/start', async (req, res, next) => {
   }
 });
 
+// a-d (multiple choice, scenario), a-b (true/false) or 1-5 (self-rating);
+// the service checks the answer fits the question's type.
+const answer = z.enum(['a', 'b', 'c', 'd', '1', '2', '3', '4', '5']);
 const singleResponseSchema = z.object({
   learner_token: z.string().uuid(),
   question_id: z.string().uuid(),
-  selected_option: z.enum(['a', 'b', 'c', 'd']),
+  selected_option: answer,
 });
 const batchResponseSchema = z.object({
   learner_token: z.string().uuid(),
-  responses: z.array(z.object({ question_id: z.string().uuid(), selected_option: z.enum(['a', 'b', 'c', 'd']) })).min(1),
+  responses: z.array(z.object({ question_id: z.string().uuid(), selected_option: answer })).min(1),
 });
 assessRouter.post('/:cohortToken/response', async (req, res, next) => {
   try {
@@ -128,6 +149,44 @@ assessRouter.post('/:cohortToken/satisfaction', async (req, res, next) => {
     const body = parse(satisfactionSchema, req.body);
     const { learner_token, ...rest } = body;
     res.json(await assessmentService.submitSatisfaction(req.params.cohortToken, learner_token, rest));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Completion certificate PDF for the learner, from their own result screen.
+assessRouter.get('/:cohortToken/certificate/:learnerToken', async (req, res, next) => {
+  try {
+    const { pdf, filename } = await certificateService.certificateForLearnerToken(req.params.cohortToken, req.params.learnerToken);
+    res.set('Content-Type', 'application/pdf').set('Content-Disposition', `attachment; filename="${filename}"`).send(pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Module 6 — tracer (follow-up) survey, 3-6 months after the course.
+assessRouter.post('/:cohortToken/tracer/identify', async (req, res, next) => {
+  try {
+    const body = parse(identifySchema, req.body);
+    res.json(await assessmentService.identifyLearnerForTracer(req.params.cohortToken, body.enrolment_id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const tracerSchema = z.object({
+  learner_token: z.string().uuid(),
+  employment_status: z.enum(['employed_new', 'employed_same', 'self_employed', 'studying', 'seeking', 'not_seeking']),
+  business_status: z.enum(['started', 'grew', 'same', 'none']),
+  income_change: z.enum(['increased_a_lot', 'increased', 'same', 'decreased', 'prefer_not_to_say']),
+  skill_usage: z.enum(['daily', 'weekly', 'monthly', 'rarely', 'never']),
+  training_contribution: z.number().int().min(1).max(5),
+  open_challenge: z.string().max(500).optional(),
+});
+assessRouter.post('/:cohortToken/tracer', async (req, res, next) => {
+  try {
+    const { learner_token, ...rest } = parse(tracerSchema, req.body);
+    res.json(await assessmentService.submitTracer(req.params.cohortToken, learner_token, rest));
   } catch (err) {
     next(err);
   }

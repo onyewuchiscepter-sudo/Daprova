@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
+import * as shareService from '../services/shareService.js';
+import * as certificateService from '../services/certificateService.js';
 
 // Unauthenticated, read-only endpoints for things that are public by
 // nature: an org's logo (it appears on learner-facing pages and documents).
@@ -21,6 +23,24 @@ publicRouter.get('/orgs/:orgId/logo', async (req, res, next) => {
       .set('X-Content-Type-Options', 'nosniff')
       .set('Cross-Origin-Resource-Policy', 'cross-origin')
       .send(org.logo_data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Funder share page data — aggregate results only (services/shareService).
+publicRouter.get('/share/:token', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store').json(await shareService.getSharedCohort(req.params.token));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Certificate verification: what's printed on the certificate, nothing more.
+publicRouter.get('/certificates/:code', async (req, res, next) => {
+  try {
+    res.json(await certificateService.verifyCertificate(req.params.code));
   } catch (err) {
     next(err);
   }

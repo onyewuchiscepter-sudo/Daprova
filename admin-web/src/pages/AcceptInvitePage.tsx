@@ -40,7 +40,7 @@ export default function AcceptInvitePage() {
         body: JSON.stringify({ display_name: displayName || undefined }),
       });
       await completeSession(result);
-      navigate('/courses');
+      navigate('/home');
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Could not accept the invite.');
     } finally {

@@ -5,6 +5,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { lockCourseIfNeeded } from './frameworkService.js';
 import { evaluateSubmission } from './dataQualityService.js';
 import { assertCapacityAvailable } from './pricingService.js';
+import { brandingForCohortId } from '../lib/branding.js';
 
 async function resolveCohortByToken(cohortToken: string) {
   const cohort = await db
@@ -23,7 +24,17 @@ type Demographics = { gender?: string; age_group?: string; location_type?: strin
 
 export async function startSession(
   cohortToken: string,
-  opts: { learner_token?: string; demographics?: Demographics; display_name?: string; enrolment_id?: string },
+  opts: {
+    learner_token?: string;
+    demographics?: Demographics;
+    display_name?: string;
+    enrolment_id?: string;
+    // Optional, only stored with consent — used for post-assessment
+    // reminders and to send the learner their certificate.
+    email?: string;
+    phone?: string;
+    contact_consent?: boolean;
+  },
 ) {
   const { cohort, sessionType } = await resolveCohortByToken(cohortToken);
 
@@ -34,10 +45,19 @@ export async function startSession(
   if (!learner) {
     // FR-M2-07: demographics are collected at pre-assessment only. A post-link
     // visit with no known learner_token means this browser/device has no
-    // record of a pre-assessment — cross-device linking is a manual admin
-    // action (US-08), not handled by this endpoint.
+    // record of a pre-assessment. Reminder messages carry a personal link
+    // (?l=<learner_token>) that fixes exactly this on any device.
     if (sessionType === 'post') {
-      throw badRequest('No learner record found for this device. Complete the pre-assessment first, or ask your admin to link your account.');
+      throw badRequest(
+        "We couldn't find your pre-assessment on this device. Open the personal link from your reminder message, or ask your programme to resend it.",
+      );
+    }
+
+    // A token this cohort doesn't know (e.g. left on a shared phone by a
+    // learner from another programme) is not an enrolment: the page falls
+    // back to the details form instead of creating a nameless learner.
+    if (opts.learner_token && !opts.display_name) {
+      throw notFound('No learner found for this link on this device.');
     }
 
     // docs/org-onboarding-spec.md §5.4 — a brand new learner is exactly the
@@ -57,6 +77,9 @@ export async function startSession(
         age_group: opts.demographics?.age_group ?? null,
         location_type: opts.demographics?.location_type ?? null,
         disability: opts.demographics?.disability ?? null,
+        email: opts.contact_consent ? (opts.email ?? null) : null,
+        phone: opts.contact_consent ? (opts.phone ?? null) : null,
+        contact_consent: !!opts.contact_consent && !!(opts.email || opts.phone),
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -101,6 +124,8 @@ export async function startSession(
       'questions.option_b',
       'questions.option_c',
       'questions.option_d',
+      'questions.question_type',
+      'questions.scenario_text',
     ])
     .where('competency_areas.course_id', '=', cohort.course_id)
     .where('competency_areas.is_active', '=', true)
@@ -134,7 +159,16 @@ async function resolveLearnerSession(cohortToken: string, learnerToken: string) 
   return { cohort, learner, session };
 }
 
-type ResponseInput = { question_id: string; selected_option: 'a' | 'b' | 'c' | 'd' };
+// selected_option is a-d for multiple choice/scenario, a-b for true/false,
+// and "1"-"5" for self-ratings.
+type ResponseInput = { question_id: string; selected_option: string };
+
+const VALID_OPTIONS: Record<string, string[]> = {
+  mcq: ['a', 'b', 'c', 'd'],
+  scenario: ['a', 'b', 'c', 'd'],
+  true_false: ['a', 'b'],
+  self_rating: ['1', '2', '3', '4', '5'],
+};
 
 // Accepts either a single response or a batch (the admin-web/assessment-web
 // client batches several answers per network round trip to cut down on 3G
@@ -145,21 +179,53 @@ export async function recordResponses(cohortToken: string, learnerToken: string,
   const { session } = await resolveLearnerSession(cohortToken, learnerToken);
   if (session.status === 'completed') throw conflict('Session already submitted, responses can no longer be recorded');
 
-  for (const r of responses) {
-    const question = await db
-      .selectFrom('questions')
-      .selectAll()
-      .where('id', '=', r.question_id)
-      .executeTakeFirst();
-    if (!question) throw badRequest(`Unknown question_id: ${r.question_id}`);
+  // Validate the whole batch first, then save it in one statement: a bad
+  // answer can't leave half a batch saved, and a batch costs two queries
+  // instead of two per answer (this runs on learners' 3G connections).
+  // Only questions from this cohort's own course are accepted.
+  const ids = [...new Set(responses.map((r) => r.question_id))];
+  const questions = await db
+    .selectFrom('questions')
+    .innerJoin('competency_areas', 'competency_areas.id', 'questions.area_id')
+    .innerJoin('cohorts', 'cohorts.course_id', 'competency_areas.course_id')
+    .select(['questions.id', 'questions.area_id', 'questions.question_type', 'questions.correct_option'])
+    .where('questions.id', 'in', ids)
+    .where('cohorts.id', '=', session.cohort_id)
+    .execute();
+  const byId = new Map(questions.map((q) => [q.id, q]));
 
-    const isCorrect = question.correct_option === r.selected_option;
-    await db
-      .insertInto('question_responses')
-      .values({ session_id: session.id, question_id: question.id, area_id: question.area_id, selected_option: r.selected_option, is_correct: isCorrect })
-      .onConflict((oc) => oc.columns(['session_id', 'question_id']).doUpdateSet({ selected_option: r.selected_option, is_correct: isCorrect, answered_at: new Date() }))
-      .execute();
-  }
+  const latest = new Map<string, ResponseInput>();
+  for (const r of responses) latest.set(r.question_id, r); // last answer wins within a batch
+  const rows = [...latest.values()].map((r) => {
+    const question = byId.get(r.question_id);
+    if (!question) throw badRequest(`Unknown question_id: ${r.question_id}`);
+    const type = question.question_type ?? 'mcq';
+    if (!(VALID_OPTIONS[type] ?? VALID_OPTIONS.mcq).includes(r.selected_option)) throw badRequest(`Invalid answer for question ${r.question_id}`);
+    // Self-ratings are the learner's own view of their skill: recorded (and
+    // reported separately), never counted towards a score.
+    const isScored = type !== 'self_rating';
+    return {
+      session_id: session.id,
+      question_id: question.id,
+      area_id: question.area_id,
+      selected_option: r.selected_option,
+      is_correct: isScored && question.correct_option === r.selected_option,
+      is_scored: isScored,
+    };
+  });
+
+  await db
+    .insertInto('question_responses')
+    .values(rows)
+    .onConflict((oc) =>
+      oc.columns(['session_id', 'question_id']).doUpdateSet((eb) => ({
+        selected_option: eb.ref('excluded.selected_option'),
+        is_correct: eb.ref('excluded.is_correct'),
+        is_scored: eb.ref('excluded.is_scored'),
+        answered_at: new Date(),
+      })),
+    )
+    .execute();
 
   return { ok: true };
 }
@@ -189,6 +255,7 @@ async function scoreSummaryFor(learnerId: string, courseId: string, resultSessio
           .select(({ fn }) => [fn.countAll().as('total'), sql<string>`count(*) filter (where is_correct)`.as('correct')])
           .where('session_id', '=', sessionId)
           .where('area_id', '=', area.id)
+          .where('is_scored', '=', true)
           .executeTakeFirst();
         const total = Number(row?.total ?? 0);
         if (total === 0) return null;
@@ -225,6 +292,7 @@ export async function submitSession(cohortToken: string, learnerToken: string, c
     .selectFrom('question_responses')
     .select(({ fn }) => [fn.countAll().as('total'), sql<string>`count(*) filter (where is_correct)`.as('correct')])
     .where('session_id', '=', session.id)
+    .where('is_scored', '=', true)
     .executeTakeFirst();
   const total = Number(agg?.total ?? 0);
   const totalScore = total > 0 ? Math.round((Number(agg?.correct ?? 0) / total) * 10000) / 100 : 0;
@@ -294,6 +362,11 @@ async function resolveCohortBySatisfactionToken(cohortToken: string) {
 // it's the lookup key here rather than collecting a fresh identity.
 export async function identifyLearnerForSatisfaction(cohortToken: string, enrolmentId: string) {
   const cohort = await resolveCohortBySatisfactionToken(cohortToken);
+  return identifyInCohort(cohort.id, enrolmentId);
+}
+
+async function identifyInCohort(cohortId: string, enrolmentId: string) {
+  const cohort = { id: cohortId };
   const learner = await db
     .selectFrom('learners')
     .selectAll()
@@ -340,4 +413,92 @@ export async function submitSatisfaction(cohortToken: string, learnerToken: stri
   }
 
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Tracer survey (Module 6): its own link, sent 3-6 months after the course,
+// asking what changed. Same identify-by-enrolment-ID flow as satisfaction.
+
+async function resolveCohortByTracerToken(cohortToken: string) {
+  const cohort = await db.selectFrom('cohorts').selectAll().where('tracer_link_token', '=', cohortToken).where('deleted_at', 'is', null).executeTakeFirst();
+  if (!cohort) throw notFound('Follow-up survey link not found or has been invalidated');
+  return cohort;
+}
+
+export async function identifyLearnerForTracer(cohortToken: string, enrolmentId: string) {
+  const cohort = await resolveCohortByTracerToken(cohortToken);
+  return identifyInCohort(cohort.id, enrolmentId);
+}
+
+export type TracerInput = {
+  employment_status: string;
+  business_status: string;
+  income_change: string;
+  skill_usage: string;
+  training_contribution: number;
+  open_challenge?: string;
+};
+
+export async function submitTracer(cohortToken: string, learnerToken: string, input: TracerInput) {
+  const cohort = await resolveCohortByTracerToken(cohortToken);
+  const learner = await db.selectFrom('learners').select('id').where('learner_token', '=', learnerToken).where('cohort_id', '=', cohort.id).executeTakeFirst();
+  if (!learner) throw notFound('Learner not found for this link');
+
+  const values = {
+    employment_status: input.employment_status,
+    business_status: input.business_status,
+    income_change: input.income_change,
+    skill_usage: input.skill_usage,
+    training_contribution: input.training_contribution,
+    open_challenge: input.open_challenge ?? null,
+  };
+  await db
+    .insertInto('tracer_responses')
+    .values({ learner_id: learner.id, cohort_id: cohort.id, survey_wave: 1, ...values })
+    .onConflict((oc) => oc.columns(['learner_id', 'cohort_id', 'survey_wave']).doUpdateSet({ ...values, updated_at: sql`now()` }))
+    .execute();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// What a learner-facing page needs before anything else: which kind of link
+// it was opened with, whose programme it is, and (for Growth+ cohorts) the
+// org's branding.
+export async function getLinkInfo(token: string) {
+  const cohort = await db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .innerJoin('organisations', 'organisations.id', 'courses.org_id')
+    .select([
+      'cohorts.id',
+      'cohorts.name as cohort_name',
+      'cohorts.pre_link_token',
+      'cohorts.post_link_token',
+      'cohorts.satisfaction_link_token',
+      'cohorts.tracer_link_token',
+      'courses.name as course_name',
+      'organisations.name as org_name',
+    ])
+    .where((eb) =>
+      eb.or([
+        eb('cohorts.pre_link_token', '=', token),
+        eb('cohorts.post_link_token', '=', token),
+        eb('cohorts.satisfaction_link_token', '=', token),
+        eb('cohorts.tracer_link_token', '=', token),
+      ]),
+    )
+    .where('cohorts.deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!cohort) throw notFound('This link is not valid or has been replaced — ask your programme for a new one.');
+
+  const kind =
+    cohort.pre_link_token === token ? 'pre' : cohort.post_link_token === token ? 'post' : cohort.satisfaction_link_token === token ? 'satisfaction' : 'tracer';
+  const branding = await brandingForCohortId(cohort.id);
+  return {
+    kind,
+    org_name: cohort.org_name,
+    course_name: cohort.course_name,
+    cohort_name: cohort.cohort_name,
+    branding: { custom: branding.custom, color: branding.color, logo_url: branding.logoUrl },
+  };
 }

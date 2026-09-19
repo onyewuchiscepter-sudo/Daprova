@@ -72,7 +72,7 @@ export default function LandingPage() {
   const { user, restoring } = useAuth();
 
   // A returning, already-signed-in admin doesn't need the pitch again.
-  if (!restoring && user) return <Navigate to="/courses" replace />;
+  if (!restoring && user) return <Navigate to="/home" replace />;
 
   const meanPre = AREAS.reduce((s, a) => s + a.pre, 0) / AREAS.length;
   const meanPost = AREAS.reduce((s, a) => s + a.post, 0) / AREAS.length;

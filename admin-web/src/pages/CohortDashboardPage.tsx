@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, resolveApiUrl } from '../api';
 import ReportsPanel, { type CohortPlan } from '../components/ReportsPanel';
+import RemindersPanel from '../components/RemindersPanel';
+import SharePanel from '../components/SharePanel';
+import OutcomesPanel from '../components/OutcomesPanel';
 
 type Cohort = {
   id: string;
@@ -11,6 +14,7 @@ type Cohort = {
   pre_link_token: string;
   post_link_token: string;
   satisfaction_link_token: string;
+  tracer_link_token: string;
   total_enrolled: number;
   pre_completed: number;
   post_completed: number;
@@ -29,6 +33,9 @@ type LearnerRow = {
   post_status: string;
   pre_score: string | null;
   post_score: string | null;
+  email: string | null;
+  phone: string | null;
+  certificate_code: string | null;
 };
 type DashboardAnalytics = {
   mean_gain: number | null;
@@ -38,6 +45,7 @@ type DashboardAnalytics = {
   cohens_d: number | null;
   pass_rate: number | null;
   competency_breakdown: Array<{ area_id: string; area_name: string; pre_pct: number | null; post_pct: number | null }>;
+  self_ratings: Array<{ area_id: string; area_name: string; pre_avg: number | null; post_avg: number | null; n: number }>;
 };
 type EquityGroup = {
   label: string;
@@ -97,10 +105,28 @@ const DIMENSION_LABEL: Record<string, string> = { gender: 'Gender', age_group: '
 export default function CohortDashboardPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'overview' | 'equity' | 'satisfaction' | 'reports'>('overview');
-
   // FR-M3-05: filter state lives in URL params so it survives a refresh.
   const [searchParams, setSearchParams] = useSearchParams();
+  type Tab = 'overview' | 'equity' | 'satisfaction' | 'outcomes' | 'reports';
+  const TABS: Tab[] = ['overview', 'equity', 'satisfaction', 'outcomes', 'reports'];
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab') as Tab | null;
+    return t && TABS.includes(t) ? t : 'overview';
+  });
+  type RemindKind = 'post' | 'satisfaction' | 'tracer';
+  const [remindKind, setRemindKind] = useState<RemindKind | null>(() => {
+    const k = searchParams.get('remind');
+    return k === 'post' || k === 'satisfaction' || k === 'tracer' ? k : null;
+  });
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => {
+    if (!searchParams.get('tab') && !searchParams.get('remind')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('tab');
+    next.delete('remind');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const filters = Object.fromEntries(FILTER_DIMENSIONS.map((d) => [d, searchParams.get(d) ?? '']).filter(([, v]) => v)) as Record<string, string>;
   const hasFilters = Object.keys(filters).length > 0;
 
@@ -156,7 +182,7 @@ export default function CohortDashboardPage() {
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: (type: 'pre' | 'post' | 'satisfaction') =>
+    mutationFn: (type: 'pre' | 'post' | 'satisfaction' | 'tracer') =>
       apiFetch(`/api/v1/cohorts/${id}/regenerate-link`, { method: 'POST', body: JSON.stringify({ type }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
@@ -199,8 +225,19 @@ export default function CohortDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentRef]);
 
-  function copyLink(token: string, basePath: 'assess' | 'satisfaction' = 'assess') {
+  function copyLink(token: string, basePath: 'assess' | 'satisfaction' | 'tracer' = 'assess') {
     navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/${basePath}/${token}`);
+  }
+
+  async function downloadCertificate(l: LearnerRow) {
+    const blob = await apiFetchBlob(`/api/v1/cohorts/${id}/learners/${l.learner_id}/certificate`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `certificate-${(l.display_name ?? 'learner').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    queryClient.invalidateQueries({ queryKey: ['cohort-learners', id] });
   }
 
   async function downloadLearnersCsv() {
@@ -223,7 +260,17 @@ export default function CohortDashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink mb-1">{cohort.name}</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
+        <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink">{cohort.name}</h1>
+        <div className="flex gap-2">
+          <button onClick={() => setRemindKind('post')} className="text-sm border border-rule rounded px-3 py-1.5 hover:border-ink">
+            Send reminders
+          </button>
+          <button onClick={() => setSharing(true)} className="text-sm border border-rule rounded px-3 py-1.5 hover:border-ink">
+            Share with funder
+          </button>
+        </div>
+      </div>
       <p className="text-sm text-ink-soft mb-6">
         <span className="capitalize">{cohort.status.replace(/_/g, ' ')}</span>
         <span className="mx-2 text-rule">|</span>
@@ -273,7 +320,7 @@ export default function CohortDashboardPage() {
         <p className="text-sm text-flag mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
       )}
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <LinkCard label="Pre-assessment link" token={cohort.pre_link_token} onCopy={copyLink} onRegenerate={() => regenerateMutation.mutate('pre')} />
         <LinkCard label="Post-assessment link" token={cohort.post_link_token} onCopy={copyLink} onRegenerate={() => regenerateMutation.mutate('post')} />
         <LinkCard
@@ -283,18 +330,27 @@ export default function CohortDashboardPage() {
           onCopy={(t) => copyLink(t, 'satisfaction')}
           onRegenerate={() => regenerateMutation.mutate('satisfaction')}
         />
+        <LinkCard
+          label="Follow-up survey link (3–6 months on)"
+          token={cohort.tracer_link_token}
+          basePath="tracer"
+          onCopy={(t) => copyLink(t, 'tracer')}
+          onRegenerate={() => regenerateMutation.mutate('tracer')}
+        />
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         <Stat label="Total enrolled" value={cohort.total_enrolled} />
         <Stat label="Pre completed" value={`${cohort.pre_completed} (${prePct}%)`} />
         <Stat label="Post completed" value={`${cohort.post_completed} (${postPct}%)`} />
-        <Stat label="Missing (not yet post)" value={missing} />
+        <button onClick={() => setRemindKind('post')} className="text-left" title="Send reminders">
+          <Stat label="Missing (not yet post) · remind" value={missing} />
+        </button>
       </div>
 
       {/* FR-M3-04: equity view lives as a tab within this same dashboard. */}
       <div className="flex gap-4 border-b mb-6">
-        {(['overview', 'equity', 'satisfaction', 'reports'] as const).map((t) => (
+        {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -308,7 +364,7 @@ export default function CohortDashboardPage() {
       {/* US-13: compound demographic filters — applying any of them updates
           the Overview tab's stats, competency breakdown, and learner table
           together via the same query. Not applicable to the Reports tab. */}
-      {tab !== 'reports' && tab !== 'satisfaction' && (
+      {tab !== 'reports' && tab !== 'satisfaction' && tab !== 'outcomes' && (
         <div className="bg-paper rounded-lg border border-rule p-4 mb-6 flex flex-wrap items-end gap-3">
           {FILTER_DIMENSIONS.map((dim) => (
             <label key={dim} className="text-xs text-ink-soft">
@@ -359,6 +415,22 @@ export default function CohortDashboardPage() {
                   ))}
                 </div>
               </div>
+              {analytics.self_ratings.length > 0 && (
+                <div className="bg-paper rounded-lg border border-rule p-5 mb-6">
+                  <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-1">Self-rated confidence</h3>
+                  <p className="text-xs text-sage mb-3">How learners rated themselves (1–5) — not part of their score.</p>
+                  <div className="space-y-2">
+                    {analytics.self_ratings.map((a) => (
+                      <div key={a.area_id} className="flex items-center justify-between text-sm">
+                        <span className="text-ink">{a.area_name}</span>
+                        <span className="font-mono text-ink-soft">
+                          {a.pre_avg ?? '—'} → {a.post_avg ?? '—'} <span className="text-sage">/ 5</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
           {analytics && analytics.n_learners === 0 && hasFilters && (
@@ -379,6 +451,7 @@ export default function CohortDashboardPage() {
                   <th className="p-3">Pre</th>
                   <th className="p-3">Post</th>
                   <th className="p-3">Gain</th>
+                  <th className="p-3">Certificate</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -388,7 +461,10 @@ export default function CohortDashboardPage() {
                   const gain = pre !== null && post !== null ? Math.round((post - pre) * 100) / 100 : null;
                   return (
                     <tr key={l.learner_id}>
-                      <td className="p-3">{l.display_name ?? l.learner_id.slice(0, 8)}</td>
+                      <td className="p-3">
+                        {l.display_name ?? l.learner_id.slice(0, 8)}
+                        {(l.email || l.phone) && <span className="ml-2 text-[11px] text-sage" title={[l.email, l.phone].filter(Boolean).join(' · ')}>✉</span>}
+                      </td>
                       <td className="p-3">
                         <StatusBadge status={l.pre_status} score={pre} />
                       </td>
@@ -396,12 +472,21 @@ export default function CohortDashboardPage() {
                         <StatusBadge status={l.post_status} score={post} />
                       </td>
                       <td className="p-3">{gain !== null ? (gain >= 0 ? '+' : '') + gain : '—'}</td>
+                      <td className="p-3">
+                        {l.post_status === 'completed' ? (
+                          <button onClick={() => downloadCertificate(l)} className="text-xs underline text-ink" title={l.certificate_code ?? undefined}>
+                            Download
+                          </button>
+                        ) : (
+                          <span className="text-xs text-sage">After post</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
                 {filteredLearners?.length === 0 && (
                   <tr>
-                    <td className="p-3 text-ink-soft" colSpan={4}>
+                    <td className="p-3 text-ink-soft" colSpan={5}>
                       {hasFilters ? 'No learners match the selected filters.' : 'No learners yet — share the pre-assessment link to get started.'}
                     </td>
                   </tr>
@@ -530,6 +615,11 @@ export default function CohortDashboardPage() {
         </div>
       )}
 
+      {tab === 'outcomes' && <OutcomesPanel cohortId={cohort.id} onRemind={() => setRemindKind('tracer')} />}
+
+      {remindKind && <RemindersPanel cohortId={cohort.id} initialKind={remindKind} onClose={() => setRemindKind(null)} />}
+      {sharing && <SharePanel cohortId={cohort.id} onClose={() => setSharing(false)} />}
+
       {tab === 'reports' && (
         <ReportsPanel cohortId={cohort.id} plan={cohort.plan} onUpgrade={() => upgradeMutation.mutate('feature')} upgrading={upgradeMutation.isPending} />
       )}
@@ -546,7 +636,7 @@ function LinkCard({
 }: {
   label: string;
   token: string;
-  basePath?: 'assess' | 'satisfaction';
+  basePath?: 'assess' | 'satisfaction' | 'tracer';
   onCopy: (t: string) => void;
   onRegenerate: () => void;
 }) {

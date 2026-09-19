@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/rbac.js';
 import { badRequest } from '../lib/errors.js';
 import * as cohortService from '../services/cohortService.js';
 import * as frameworkService from '../services/frameworkService.js';
+import * as insightsService from '../services/insightsService.js';
 
 export const coursesRouter = Router();
 coursesRouter.use(requireAuth, requireRole('admin'));
@@ -119,13 +120,18 @@ coursesRouter.delete('/:id/areas/:areaId', async (req, res, next) => {
   }
 });
 
+// Per-type rules (e.g. true/false has two options, self-ratings have no
+// correct answer) are enforced by frameworkService.normalizeQuestion.
+const questionType = z.enum(['mcq', 'true_false', 'scenario', 'self_rating']);
 const createQuestionSchema = z.object({
+  question_type: questionType.optional(),
   question_text: z.string().min(1),
-  option_a: z.string().min(1),
-  option_b: z.string().min(1),
-  option_c: z.string().min(1),
-  option_d: z.string().min(1),
-  correct_option: z.enum(['a', 'b', 'c', 'd']),
+  scenario_text: z.string().nullable().optional(),
+  option_a: z.string().nullable().optional(),
+  option_b: z.string().nullable().optional(),
+  option_c: z.string().nullable().optional(),
+  option_d: z.string().nullable().optional(),
+  correct_option: z.string().nullable().optional(),
   assessment_type: z.enum(['pre', 'post', 'both']).optional(),
 });
 coursesRouter.post('/:id/areas/:areaId/questions', async (req, res, next) => {
@@ -149,12 +155,14 @@ coursesRouter.post('/:id/areas/:areaId/questions/bulk', async (req, res, next) =
 });
 
 const updateQuestionSchema = z.object({
+  question_type: questionType.optional(),
   question_text: z.string().min(1).optional(),
-  option_a: z.string().min(1).optional(),
-  option_b: z.string().min(1).optional(),
-  option_c: z.string().min(1).optional(),
-  option_d: z.string().min(1).optional(),
-  correct_option: z.enum(['a', 'b', 'c', 'd']).optional(),
+  scenario_text: z.string().nullable().optional(),
+  option_a: z.string().nullable().optional(),
+  option_b: z.string().nullable().optional(),
+  option_c: z.string().nullable().optional(),
+  option_d: z.string().nullable().optional(),
+  correct_option: z.string().nullable().optional(),
   assessment_type: z.enum(['pre', 'post', 'both']).optional(),
   is_active: z.boolean().optional(),
 });
@@ -162,6 +170,37 @@ coursesRouter.patch('/:id/questions/:qId', async (req, res, next) => {
   try {
     const body = parse(updateQuestionSchema, req.body);
     res.json(await frameworkService.updateQuestion(req.auth!.org_id!, req.params.id, req.params.qId, body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Question bank: search the org's own questions and Daprova's templates…
+coursesRouter.get('/question-bank/search', async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+    res.json(await frameworkService.searchQuestionBank(req.auth!.org_id!, { q, type }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// …and copy chosen ones into an area of this course.
+const importQuestionsSchema = z.object({ question_ids: z.array(z.string().uuid()).min(1).max(100) });
+coursesRouter.post('/:id/areas/:areaId/questions/import', async (req, res, next) => {
+  try {
+    const body = parse(importQuestionsSchema, req.body);
+    res.status(201).json(await frameworkService.importQuestionsFromBank(req.auth!.org_id!, req.params.id, req.params.areaId, body.question_ids));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Every cohort of this course side by side (mean pre/post/gain, pass rate).
+coursesRouter.get('/:id/comparison', async (req, res, next) => {
+  try {
+    res.json(await insightsService.courseComparison(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);
   }

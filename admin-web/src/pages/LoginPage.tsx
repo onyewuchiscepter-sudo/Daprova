@@ -35,7 +35,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const { requiresOrgSelection } = await signIn(email, password);
-      if (!requiresOrgSelection) navigate('/courses');
+      if (!requiresOrgSelection) navigate('/home');
       // else: pendingOrgSelection is now set on the auth context, and this
       // component re-renders below showing the org picker instead.
     } catch (err) {
@@ -50,7 +50,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await selectOrg(orgId);
-      navigate('/courses');
+      navigate('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open that organisation.');
     } finally {

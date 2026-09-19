@@ -105,10 +105,12 @@ export interface QuestionsTable {
   question_text: string;
   option_a: string;
   option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_option: string;
+  option_c: string | null;
+  option_d: string | null;
+  correct_option: string | null;
   assessment_type: Generated<string>;
+  question_type: Generated<string>; // mcq | true_false | scenario | self_rating
+  scenario_text: string | null;
   is_active: Generated<boolean>;
   created_at: Generated<Timestamp>;
 }
@@ -132,6 +134,7 @@ export interface CohortsTable {
   plan_tier_at_creation: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  tracer_link_token: Generated<string>;
 }
 
 export interface LearnersTable {
@@ -145,6 +148,10 @@ export interface LearnersTable {
   location_type: string | null;
   disability: string | null;
   created_at: Generated<Timestamp>;
+  email: string | null;
+  phone: string | null;
+  contact_consent: Generated<boolean>;
+  certificate_code: string | null;
 }
 
 export interface AssessmentSessionsTable {
@@ -169,6 +176,7 @@ export interface QuestionResponsesTable {
   selected_option: string | null;
   is_correct: boolean;
   answered_at: Generated<Timestamp>;
+  is_scored: Generated<boolean>;
 }
 
 export interface ConfidenceRatingsTable {
@@ -203,6 +211,8 @@ export interface TracerResponsesTable {
   training_contribution: number | null;
   open_challenge: string | null;
   created_at: Generated<Timestamp>;
+  business_status: string | null;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface CohortReportsTable {
@@ -310,6 +320,31 @@ export interface SignupFraudFlagsTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface LearnerRemindersTable {
+  id: Generated<string>;
+  cohort_id: string;
+  learner_id: string;
+  kind: string; // post | satisfaction | tracer
+  channel: string; // email | sms | whatsapp
+  status: string; // sent | failed
+  error: string | null;
+  sent_by: string | null;
+  created_at: Generated<Timestamp>;
+}
+
+export interface CohortShareLinksTable {
+  id: Generated<string>;
+  cohort_id: string;
+  token: string;
+  label: string | null;
+  created_by: string | null;
+  created_at: Generated<Timestamp>;
+  revoked_at: Timestamp | null;
+  view_count: Generated<number>;
+  last_viewed_at: Timestamp | null;
+}
+
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
@@ -322,6 +357,9 @@ export interface Database {
   signup_fraud_flags: SignupFraudFlagsTable;
   payments: PaymentsTable;
   payment_stub_state: PaymentStubStateTable;
+  learner_reminders: LearnerRemindersTable;
+  cohort_share_links: CohortShareLinksTable;
+  tracer_responses: TracerResponsesTable;
   impersonation_sessions: ImpersonationSessionsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;
@@ -334,6 +372,5 @@ export interface Database {
   question_responses: QuestionResponsesTable;
   confidence_ratings: ConfidenceRatingsTable;
   satisfaction_responses: SatisfactionResponsesTable;
-  tracer_responses: TracerResponsesTable;
   cohort_reports: CohortReportsTable;
 }

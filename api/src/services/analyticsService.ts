@@ -91,6 +91,7 @@ export async function getCompetencyBreakdown(cohortId: string, courseId: string,
     ])
     .where('s.cohort_id', '=', cohortId)
     .where('s.status', '=', 'completed')
+    .where('qr.is_scored', '=', true)
     .groupBy(['qr.area_id', 's.session_type', 's.learner_id']);
   perLearnerArea = applyDemographicFilters(perLearnerArea, 'l', filters);
 
@@ -290,5 +291,71 @@ export async function getMeanConfidence(cohortId: string) {
   return {
     mean_confidence_pre: row?.mean_confidence_pre !== null && row?.mean_confidence_pre !== undefined ? Number(row.mean_confidence_pre) : null,
     mean_confidence_post: row?.mean_confidence_post !== null && row?.mean_confidence_post !== undefined ? Number(row.mean_confidence_post) : null,
+  };
+}
+
+// Self-rating questions (1-5, "how confident are you at X?") per competency
+// area, pre vs post. Kept apart from scores: it's how learners see
+// themselves, which funders often want next to what they could actually do.
+export async function getSelfRatings(cohortId: string) {
+  const rows = await db
+    .selectFrom('question_responses as qr')
+    .innerJoin('assessment_sessions as s', 's.id', 'qr.session_id')
+    .innerJoin('competency_areas as ca', 'ca.id', 'qr.area_id')
+    .select([
+      'ca.id as area_id',
+      'ca.name as area_name',
+      sql<string>`round(avg(case when s.session_type = 'pre' then qr.selected_option::int end)::numeric, 2)`.as('pre_avg'),
+      sql<string>`round(avg(case when s.session_type = 'post' then qr.selected_option::int end)::numeric, 2)`.as('post_avg'),
+      sql<string>`count(distinct s.learner_id)`.as('n'),
+    ])
+    .where('s.cohort_id', '=', cohortId)
+    .where('s.status', '=', 'completed')
+    .where('qr.is_scored', '=', false)
+    .groupBy(['ca.id', 'ca.name', 'ca.display_order'])
+    .orderBy('ca.display_order')
+    .execute();
+  return rows.map((r) => ({
+    area_id: r.area_id,
+    area_name: r.area_name,
+    pre_avg: r.pre_avg !== null ? Number(r.pre_avg) : null,
+    post_avg: r.post_avg !== null ? Number(r.post_avg) : null,
+    n: Number(r.n),
+  }));
+}
+
+// Tracer survey (Module 6) summary: how many answered, and the share of
+// respondents in each answer for the outcome questions.
+export async function getOutcomesSummary(cohortId: string) {
+  const rows = await db
+    .selectFrom('tracer_responses')
+    .select(['employment_status', 'business_status', 'income_change', 'skill_usage', 'training_contribution', 'open_challenge', 'updated_at'])
+    .where('cohort_id', '=', cohortId)
+    .execute();
+  const n = rows.length;
+  const share = (key: 'employment_status' | 'business_status' | 'income_change' | 'skill_usage') => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const v = r[key] ?? 'not_answered';
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([label, count]) => ({ label, count, pct: Math.round((count / n) * 1000) / 10 })).sort((a, b) => b.count - a.count);
+  };
+  const contributions = rows.map((r) => r.training_contribution).filter((v): v is number => v !== null);
+  const [enrolled] = await Promise.all([
+    db.selectFrom('learners').select(({ fn }) => fn.countAll().as('count')).where('cohort_id', '=', cohortId).executeTakeFirstOrThrow(),
+  ]);
+  return {
+    response_count: n,
+    enrolled: Number(enrolled.count),
+    employment: n ? share('employment_status') : [],
+    business: n ? share('business_status') : [],
+    income: n ? share('income_change') : [],
+    skill_usage: n ? share('skill_usage') : [],
+    avg_training_contribution: contributions.length ? Math.round((contributions.reduce((a, b) => a + b, 0) / contributions.length) * 100) / 100 : null,
+    stories: rows
+      .filter((r) => r.open_challenge)
+      .sort((a, b) => new Date(b.updated_at as unknown as string).getTime() - new Date(a.updated_at as unknown as string).getTime())
+      .map((r) => r.open_challenge as string),
   };
 }

@@ -16,6 +16,9 @@ import CohortsListPage from './pages/CohortsListPage';
 import TeamPage from './pages/TeamPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ImpersonatePage from './pages/ImpersonatePage';
+import HomePage from './pages/HomePage';
+import SharePage from './pages/SharePage';
+import VerifyCertificatePage from './pages/VerifyCertificatePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, restoring } = useAuth();
@@ -33,6 +36,10 @@ function AppRoutes() {
       <Route path="/signup/contact-sales" element={<ContactSalesPage />} />
       <Route path="/accept-invite/:token" element={<AcceptInvitePage />} />
       <Route path="/impersonate" element={<ImpersonatePage />} />
+      {/* Public, no sign-in: funder results links and certificate checks. */}
+      <Route path="/share/:token" element={<SharePage />} />
+      <Route path="/verify" element={<VerifyCertificatePage />} />
+      <Route path="/verify/:code" element={<VerifyCertificatePage />} />
       <Route
         element={
           <RequireAuth>
@@ -40,6 +47,7 @@ function AppRoutes() {
           </RequireAuth>
         }
       >
+        <Route path="/home" element={<HomePage />} />
         <Route path="/frameworks" element={<FrameworksListPage />} />
         <Route path="/frameworks/import" element={<ImportFrameworkTemplatePage />} />
         <Route path="/frameworks/:id" element={<FrameworkDetailPage />} />

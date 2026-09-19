@@ -106,8 +106,18 @@ you go:
    | `RESEND_API_KEY` | `RESEND_API_KEY` from `.env.local` |
 
    Only add **secrets** in the dashboard. Plain settings (`FIREBASE_PROJECT_ID`,
-   the `*_ORIGIN`s, `COOKIE_SAMESITE`) live in `vars` in
+   the `*_ORIGIN`s, `COOKIE_SAMESITE`, `API_PUBLIC_URL`) live in `vars` in
    `api/wrangler.jsonc`, and every deploy overwrites dashboard copies of them.
+
+   Optional secrets, added when you have the accounts:
+
+   | Secret | For | Guide |
+   |---|---|---|
+   | `PAYSTACK_SECRET_KEY` | real payments via Paystack | `docs/payments-setup.md` |
+   | `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_WEBHOOK_HASH` | real payments via Flutterwave | `docs/payments-setup.md` |
+   | `PAYMENT_PROVIDER` | force `paystack` / `flutterwave` / `stub` | `docs/payments-setup.md` |
+   | `TERMII_API_KEY`, `TERMII_SENDER_ID`, `TERMII_BASE_URL` | SMS reminders | `docs/reminders-setup.md` |
+   | `REMINDER_FROM_EMAIL` | sender address for email reminders | `docs/reminders-setup.md` |
 7. **Check it's up.** Open the Worker's URL (shown on its overview page) with
    `/health` on the end. You should see `{"status":"ok",...}`. Put the URL in
    your note.

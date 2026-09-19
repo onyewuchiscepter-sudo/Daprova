@@ -37,6 +37,8 @@
     "COOKIE_SAMESITE": "none",
     "ADMIN_DASHBOARD_ORIGIN": "https://daprova-admin.pages.dev",
     "ASSESSMENT_WEB_ORIGIN": "https://daprova-assess.pages.dev",
-    "PLATFORM_WEB_ORIGIN": "https://daprova-platform.pages.dev"
+    "PLATFORM_WEB_ORIGIN": "https://daprova-platform.pages.dev",
+    // This API's own address, for links that leave the app (org logos in emails).
+    "API_PUBLIC_URL": "https://daprova.onyewuchiscepter.workers.dev"
   }
 }

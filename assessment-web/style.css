@@ -264,3 +264,129 @@ textarea {
   outline: 2px solid var(--gain);
   outline-offset: 2px;
 }
+
+/* Programme header: the org's logo (Growth plan and above) or Daprova's mark,
+   with the programme name — so a learner knows whose assessment this is. */
+.brand {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 18px 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand[hidden] {
+  display: none;
+}
+.brand-logo {
+  max-height: 40px;
+  max-width: 140px;
+  object-fit: contain;
+}
+.brand-mark {
+  width: 32px;
+  height: 32px;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.brand-org {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.brand-course {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+input[type='email'],
+input[type='tel'] {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--paper);
+  color: var(--ink);
+}
+input[type='email']:focus,
+input[type='tel']:focus {
+  outline: none;
+  border-color: var(--gain);
+}
+
+fieldset.contact {
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+  padding: 14px 14px 4px;
+  margin: 6px 0 16px;
+}
+fieldset.contact legend {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0 4px;
+}
+.optional {
+  font-weight: 400;
+  color: var(--sage);
+}
+label.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-weight: 400;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+}
+label.check input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Scenario questions: the situation reads first, set apart from the question. */
+.scenario {
+  background: var(--ground);
+  border-left: 3px solid var(--gain);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.scenario-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sage);
+  margin-bottom: 4px;
+}
+
+.scale-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.choice-list .option {
+  font-size: 0.92rem;
+  padding: 11px 13px;
+}
+
+a.btn-certificate {
+  text-align: center;
+  text-decoration: none;
+  margin: 16px 0 4px;
+}

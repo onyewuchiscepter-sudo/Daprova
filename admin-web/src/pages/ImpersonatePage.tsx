@@ -29,7 +29,7 @@ export default function ImpersonatePage() {
     }
 
     adoptImpersonation(token, { mode, orgName, targetEmail })
-      .then(() => navigate('/courses'))
+      .then(() => navigate('/home'))
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not start impersonation session'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restoring]);

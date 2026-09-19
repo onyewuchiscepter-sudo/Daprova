@@ -64,6 +64,17 @@ export const env = {
   // Flutterwave signs webhooks with a shared "secret hash" you choose in
   // its dashboard (Settings → Webhooks), sent back as the verif-hash header.
   flutterwaveWebhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH,
+  // Learner reminders. Email goes through Resend (RESEND_API_KEY) from this
+  // address, which must be on a domain verified in Resend.
+  reminderFromEmail: process.env.REMINDER_FROM_EMAIL ?? process.env.INVITE_FROM_EMAIL ?? 'onboarding@daprova.com',
+  // SMS through Termii (https://termii.com). TERMII_BASE_URL is the base URL
+  // shown in your Termii dashboard; the sender ID must be approved there.
+  termiiApiKey: process.env.TERMII_API_KEY,
+  termiiSenderId: process.env.TERMII_SENDER_ID ?? 'Daprova',
+  termiiBaseUrl: process.env.TERMII_BASE_URL ?? 'https://api.ng.termii.com',
+  // This API's own public URL, for links that leave the app (logo images in
+  // emails). Unset in local dev.
+  apiPublicUrl: process.env.API_PUBLIC_URL,
 };
 
 // Never serve production traffic on known dev secrets or against the emulator.
