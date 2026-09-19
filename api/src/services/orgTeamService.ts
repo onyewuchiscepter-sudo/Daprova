@@ -54,7 +54,13 @@ export async function inviteMember(
     .values({ org_id: orgId, email: opts.email, role: opts.role, token, invited_by: inviterPersonId, expires_at: expiresAt })
     .execute();
 
-  await sendInviteEmail({ to: opts.email, orgName, inviterEmail, acceptUrl: `${acceptUrlBase}/${token}` });
+  try {
+    await sendInviteEmail({ to: opts.email, orgName, inviterEmail, acceptUrl: `${acceptUrlBase}/${token}` });
+  } catch (err) {
+    // No email went out, so don't leave an invite nobody can accept.
+    await db.deleteFrom('invites').where('token', '=', token).execute();
+    throw badRequest(`The invite email could not be sent (${(err as Error).message}). Nothing was saved — please try again.`);
+  }
 
   await writeAuditLog({
     actorPersonId: inviterPersonId,

@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom';
 import { DaprovaMark } from '../components/Logo';
 import { useAuth } from '../auth';
+import LandingPricing from './LandingPricing';
 import './LandingPage.css';
 
 // Real figures from a generated Digital Skills cohort report (n=245) rather
@@ -48,6 +49,16 @@ const CAPABILITIES = [
     body: 'Export to PDF or Word in the shape MasterCard Foundation, Tony Elumelu, or GIZ/USAID expect — or a generic donor template when it is your own board asking.',
     amber: true,
   },
+  {
+    eyebrow: 'Completion',
+    title: 'Nudge the learners who stopped halfway',
+    body: 'See who did the pre-assessment but not the post, and remind them by email, SMS or WhatsApp. Learners who finish get a certificate anyone can verify online.',
+  },
+  {
+    eyebrow: 'Outcomes',
+    title: 'Follow up, and let funders watch live',
+    body: 'A follow-up survey 3–6 months on records jobs, income and further study. A read-only link lets a funder see results as they come in, and cohorts can be compared over time.',
+  },
 ];
 
 const STEPS = [
@@ -64,7 +75,7 @@ const STEPS = [
   {
     n: 'Step 03',
     title: 'Export the evidence',
-    body: 'Watch gains and equity breakdowns update as responses arrive, then generate the funder report when the cohort closes.',
+    body: 'Watch gains and equity breakdowns update as responses arrive, then generate the funder report and finalise the cohort when it ends.',
   },
 ];
 
@@ -88,6 +99,9 @@ export default function LandingPage() {
             </span>
           </span>
           <nav className="dp-nav">
+            <a href="#pricing" className="dp-link">
+              Pricing
+            </a>
             <Link to="/login" className="dp-link">
               Log in
             </Link>
@@ -257,9 +271,11 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <LandingPricing />
+
         <section className="dp-close">
           <h2 className="dp-h2">Measure your next cohort.</h2>
-          <p className="dp-sub">Free to start. No card required. Your first framework takes about ten minutes to set up.</p>
+          <p className="dp-sub">Your first cohort is free — no base fee, no card. Your first framework takes about ten minutes to set up.</p>
           <Link to="/signup" className="dp-btn dp-btn-lg">
             Sign up your organisation
           </Link>

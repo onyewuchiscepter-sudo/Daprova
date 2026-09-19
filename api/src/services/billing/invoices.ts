@@ -14,7 +14,7 @@ export const PAYMENT_TERMS_DAYS = 7;
 export const BLOCK_AFTER_OVERDUE_DAYS = 14;
 
 export type InvoiceKind = 'monthly_base' | 'cohort_cycle_base' | 'cohort_completion' | 'report_overage';
-export type InvoiceLine = { category: 'base' | 'assessment' | 'report' | 'credit'; description: string; quantity: number; unit_ngn: number; amount_ngn: number };
+export type InvoiceLine = { category: 'base' | 'assessment' | 'report' | 'credit' | 'discount'; description: string; quantity: number; unit_ngn: number; amount_ngn: number };
 
 export async function createInvoice(opts: {
   org: OrgBilling;
@@ -26,8 +26,27 @@ export async function createInvoice(opts: {
   lines: InvoiceLine[];
   notes?: string;
 }) {
-  const sum = (c: InvoiceLine['category']) => opts.lines.filter((l) => l.category === c).reduce((a, l) => a + l.amount_ngn, 0);
-  const total = opts.lines.reduce((a, l) => a + l.amount_ngn, 0);
+  const lines = [...opts.lines];
+  // Account credit (granted by Daprova staff) is used up before anything is
+  // charged. The conditional decrement keeps two invoices issued at the
+  // same moment from spending the same credit.
+  const gross = lines.reduce((a, l) => a + l.amount_ngn, 0);
+  if (gross > 0) {
+    const org = await db.selectFrom('organisations').select('credit_ngn').where('id', '=', opts.org.id).executeTakeFirst();
+    const apply = Math.min(Number(org?.credit_ngn ?? 0), gross);
+    if (apply > 0) {
+      const taken = await db
+        .updateTable('organisations')
+        .set({ credit_ngn: sql`credit_ngn - ${apply}` })
+        .where('id', '=', opts.org.id)
+        .where('credit_ngn', '>=', String(apply))
+        .returning('id')
+        .executeTakeFirst();
+      if (taken) lines.push({ category: 'credit', description: 'Account credit applied', quantity: 1, unit_ngn: -apply, amount_ngn: -apply });
+    }
+  }
+  const sum = (c: InvoiceLine['category']) => lines.filter((l) => l.category === c).reduce((a, l) => a + l.amount_ngn, 0);
+  const total = lines.reduce((a, l) => a + l.amount_ngn, 0);
   const { rows } = await sql<{ n: string }>`select nextval('invoice_number_seq') as n`.execute(db);
   const year = new Date().getUTCFullYear();
   const due = new Date(Date.now() + PAYMENT_TERMS_DAYS * 86400000);
@@ -46,10 +65,11 @@ export async function createInvoice(opts: {
       base_fee_ngn: String(sum('base')),
       assessment_fee_ngn: String(sum('assessment')),
       report_fee_ngn: String(sum('report')),
-      learners_billed_count: opts.lines.filter((l) => l.category === 'assessment').reduce((a, l) => a + l.quantity, 0),
-      reports_billed_count: opts.lines.filter((l) => l.category === 'report').reduce((a, l) => a + l.quantity, 0),
+      learners_billed_count: lines.filter((l) => l.category === 'assessment').reduce((a, l) => a + l.quantity, 0),
+      reports_billed_count: lines.filter((l) => l.category === 'report').reduce((a, l) => a + l.quantity, 0),
       total_ngn: String(total),
-      line_items: JSON.stringify(opts.lines),
+      discount_ngn: String(-sum('credit')),
+      line_items: JSON.stringify(lines),
       // Nothing to pay (e.g. a fully waived free-trial cohort): recorded for
       // the history, settled on creation.
       status: total > 0 ? 'pending' : 'paid',
@@ -76,6 +96,7 @@ const INVOICE_COLUMNS = [
   'learners_billed_count',
   'reports_billed_count',
   'total_ngn',
+  'discount_ngn',
   'line_items',
   'status',
   'due_date',

@@ -54,11 +54,64 @@ then follows volume again, unless the org is on a custom Enterprise agreement.
 - Workers: the Cron Trigger `7 * * * *` runs `runBillingCycle()`. It marks overdue
   invoices, rolls monthly periods, re-evaluates tiers and auto-finalises cohorts.
   Node runs the same job hourly.
-- Platform console → org → **Run billing job now** triggers it on demand.
+- Platform console → Overview → **Run billing job now** triggers it on demand.
+
+## Credits and discounts
+
+- **Account credit** (org page → Credit): a balance used automatically before
+  anything is charged on the org's next invoices, shown as an "Account credit
+  applied" line. Use it for prepayments or goodwill. A negative amount removes credit.
+- **Discount** (any unpaid invoice → Discount): takes an amount off with a
+  reason printed on the invoice. A discount down to ₦0 settles the invoice. Any
+  checkout already open for the old amount is cancelled, so the customer pays the new total.
+- Marking an invoice paid or voiding it also cancels any open checkout for it.
 
 ## Platform console
 
-For each org it shows the plan and volume, and lets you edit pricing (tier,
-frequency, projected volume, custom Enterprise JSON). From there you can also
-mark invoices paid or void them (e.g. bank transfers), grant a free cohort,
-and correct the billing status.
+Sign in at the platform site. The tabs:
+
+- **Overview**: money collected (month, year, all time, last 6 months), recurring
+  base fees, what's awaiting payment and overdue, orgs by plan and status, usage
+  in the last 30 days, and anything waiting for review. Owners can run the billing job here.
+- **Organisations**: search, filter by plan, billing state and verification,
+  and sort by amount owed or last active. Create an org for a sales-led deal; leave the
+  password empty and the admin gets an email to set their own.
+- **Org page**: verify, suspend, reactivate, ban, close or reopen. Also: edit
+  name and billing email, change plan and pricing, grant a free cohort, set
+  billing status, add or remove credit, discount, remind, mark paid or void invoices,
+  change member roles or remove members (the last admin is protected), send a
+  password-reset email, impersonate, invite, resend or revoke invites, see
+  cohorts and the org's recent activity.
+- **Invoices**: every org's invoices, filtered by status and searchable by number or org.
+- **Payments**: gateway status, recent checkouts, and "check pending payments now".
+- **Review**: orgs awaiting verification and signup fraud flags.
+- **Announcements**: a banner in the org app for everyone, one plan, or one org,
+  with an optional end date. It can also be emailed to those orgs' admins.
+- **Team**: platform staff. Adding someone new creates their login and Firebase
+  emails them a link to set a password. The last owner can't be removed or demoted.
+- **Activity**: the full audit log, filterable by action and person, with paging.
+
+**Roles.** *Owner* can do everything. *Support* can view everything and can
+verify orgs, review fraud flags, impersonate (read-only), send invoice
+reminders, password resets and invite re-sends. Support can't create orgs or
+change money, plans, account status, members or staff.
+
+**Reasons.** Suspending, reactivating, closing, reopening or banning an org,
+granting a free cohort, changing billing status or pricing, and marking an
+invoice paid or void all require a reason. It's saved in the activity log.
+
+**Access takes effect immediately.** Every request re-checks the org's status and
+the person's membership and role. Suspending or closing an org, removing a member or
+changing their role applies on their next click, not when their 24-hour
+session runs out. Ending an impersonation stops it at once. An impersonation
+session can never use the platform console or switch organisations. Staff
+sign in to the console with a session that belongs to no organisation, so
+suspending an org they also belong to doesn't lock them out.
+
+**Setup secret.** `BOOTSTRAP_SECRET` can create the first platform owner only.
+Once any owner exists it refuses, and every use is logged. Remove the secret
+from Cloudflare once setup is done; the setup routes then answer 404.
+
+Emails (reminders, announcements, invites) go through Resend. They need
+`RESEND_API_KEY` and a verified sending domain. A failed send is reported in
+the console, never shown as sent.

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { requireAuth } from '../middleware/auth.js';
-import { unauthorized, notFound, badRequest } from '../lib/errors.js';
+import { unauthorized, notFound, badRequest, forbidden } from '../lib/errors.js';
 import { signOrgSelectionToken, verifyOrgSelectionToken, verifyRefreshToken, signSessionToken } from '../lib/sessionTokens.js';
 import { issueSession, REFRESH_COOKIE, refreshCookieOpts as cookieOpts } from '../lib/sessionIssuance.js';
 
@@ -45,6 +45,17 @@ authRouter.post('/verify', async (req, res, next) => {
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     if (!person) throw notFound('No Daprova account provisioned for this login');
+
+    // The platform console asks for a staff session (?platform=1): no org
+    // context at all, so a staff member who also belongs to an org keeps
+    // console access even if that org is suspended or closed.
+    if (req.query.platform === '1') {
+      const platformAdmin = await db.selectFrom('platform_admins').select('id').where('person_id', '=', person.id).executeTakeFirst();
+      if (!platformAdmin) throw forbidden('This account is not on the Daprova platform team');
+      await db.updateTable('people').set({ last_login_at: new Date() }).where('id', '=', person.id).execute();
+      res.json({ session_token: signSessionToken({ sub: person.id }), user: { id: person.id, email: person.email, display_name: person.display_name, role: null, org_id: null } });
+      return;
+    }
 
     const memberships = await listMemberships(person.id);
 
@@ -119,6 +130,9 @@ authRouter.post('/select-org', async (req, res, next) => {
 // backend counterpart (docs/org-onboarding-spec.md §2).
 authRouter.post('/switch-org', requireAuth, async (req, res, next) => {
   try {
+    // Switching would mint an ordinary session for the impersonated person,
+    // escaping read-only mode and the 30-minute limit.
+    if (req.auth!.impersonation) throw forbidden('Switching organisation is not available while impersonating');
     const orgId = req.body?.org_id;
     if (!orgId) throw badRequest('Missing org_id');
 

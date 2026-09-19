@@ -38,6 +38,7 @@ export interface OrganisationsTable {
   billing_started_at: Timestamp | null;
   current_period_start: Timestamp | null;
   pending_tier: string | null;
+  credit_ngn: Generated<string>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -250,7 +251,7 @@ export interface PlatformAdminsTable {
 export interface AuditLogTable {
   id: Generated<string>;
   actor_person_id: string | null;
-  actor_context: string; // org_admin | platform_admin | impersonating
+  actor_context: string; // org_admin | platform_admin | impersonating | system
   org_id: string | null;
   action: string;
   details: unknown | null;
@@ -382,11 +383,28 @@ export interface InvoicesTable {
   learners_billed_count: Generated<number>;
   reports_billed_count: Generated<number>;
   total_ngn: string;
+  discount_ngn: Generated<string>;
   line_items: Generated<unknown>;
   status: Generated<string>; // pending | paid | overdue | void
   due_date: Timestamp;
   paid_at: Timestamp | null;
   notes: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
+export interface AnnouncementsTable {
+  id: Generated<string>;
+  title: string;
+  body: string;
+  level: Generated<string>; // info | warning
+  audience: Generated<string>; // all | tier | org
+  audience_tier: string | null;
+  audience_org_id: string | null;
+  starts_at: ColumnType<Date, Date | string | undefined, Date | string>;
+  ends_at: Timestamp | null;
+  emailed_count: Generated<number>;
+  created_by: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
 }
@@ -415,6 +433,7 @@ export interface Database {
   pricing_tiers: PricingTiersTable;
   invoices: InvoicesTable;
   report_quota_usage: ReportQuotaUsageTable;
+  announcements: AnnouncementsTable;
   cohort_share_links: CohortShareLinksTable;
   tracer_responses: TracerResponsesTable;
   impersonation_sessions: ImpersonationSessionsTable;

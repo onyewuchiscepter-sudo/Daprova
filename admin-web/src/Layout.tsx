@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import { DaprovaMark } from './components/Logo';
+import Announcements from './components/Announcements';
 
 const NAV = [
   { to: '/home', label: 'Home' },
@@ -126,6 +127,8 @@ export default function Layout() {
           </div>
         </div>
       </header>
+
+      <Announcements />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <Outlet />

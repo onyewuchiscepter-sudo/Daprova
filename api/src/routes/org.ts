@@ -10,6 +10,7 @@ import * as orgTeamService from '../services/orgTeamService.js';
 import * as insightsService from '../services/insightsService.js';
 import { orgLogoPath, parseBrandColor, parseLogoDataUrl } from '../lib/branding.js';
 import { sql } from 'kysely';
+import { activeAnnouncementsForOrg } from '../services/platformOpsService.js';
 
 export const orgRouter = Router();
 
@@ -64,6 +65,15 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
 
 // GET /api/v1/org/memberships — every org the current signed-in person
 // belongs to, for the org-switcher UI (docs/org-onboarding-spec.md §2).
+// Notices from Daprova (platform console → Announcements) for this org.
+orgRouter.get('/org/announcements', requireAuth, async (req, res, next) => {
+  try {
+    res.json(req.auth!.org_id ? await activeAnnouncementsForOrg(req.auth!.org_id) : []);
+  } catch (err) {
+    next(err);
+  }
+});
+
 orgRouter.get('/org/memberships', requireAuth, async (req, res, next) => {
   try {
     const rows = await db

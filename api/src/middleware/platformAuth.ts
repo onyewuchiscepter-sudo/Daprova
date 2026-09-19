@@ -20,6 +20,11 @@ declare global {
 export function requirePlatformRole(...roles: PlatformRole[]) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.auth) return next(unauthorized());
+    // An impersonation session acts as the customer it targets. It must
+    // never carry platform powers — even when that customer is also on the
+    // Daprova team — or impersonating could be used to borrow someone
+    // else's platform role.
+    if (req.auth.impersonation) return next(forbidden('Platform access is not available from an impersonation session'));
 
     const admin = await db.selectFrom('platform_admins').selectAll().where('person_id', '=', req.auth.sub).executeTakeFirst();
     if (!admin) return next(forbidden('Platform admin access required'));

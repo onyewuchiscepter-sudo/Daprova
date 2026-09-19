@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
@@ -5,11 +6,31 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
 import { billingSummary, listInvoices, markInvoicePaid, runBillingCycle } from './billing/index.js';
 
+// Every org with the figures the console filters and sorts by.
 export async function listOrgs() {
   return db
-    .selectFrom('organisations')
-    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'verification_status', 'pricing_tier', 'billing_frequency', 'is_enterprise_custom', 'created_at', 'deleted_at'])
-    .orderBy('created_at', 'desc')
+    .selectFrom('organisations as o')
+    .select([
+      'o.id',
+      'o.name',
+      'o.slug',
+      'o.contact_email',
+      'o.billing_status',
+      'o.verification_status',
+      'o.pricing_tier',
+      'o.billing_frequency',
+      'o.is_enterprise_custom',
+      'o.billing_started_at',
+      'o.credit_ngn',
+      'o.created_at',
+      'o.deleted_at',
+      sql<number>`(select count(*) from org_memberships m where m.org_id = o.id and m.deleted_at is null)::int`.as('member_count'),
+      sql<number>`(select count(*) from cohorts c join courses cr on cr.id = c.course_id where cr.org_id = o.id and c.deleted_at is null)::int`.as('cohort_count'),
+      sql<string>`(select coalesce(sum(i.total_ngn), 0) from invoices i where i.org_id = o.id and i.status in ('pending','overdue') and i.deleted_at is null)`.as('outstanding_ngn'),
+      sql<boolean>`exists (select 1 from invoices i where i.org_id = o.id and i.status = 'overdue' and i.deleted_at is null)`.as('has_overdue'),
+      sql<Date | null>`(select max(p.last_login_at) from org_memberships m join people p on p.id = m.person_id where m.org_id = o.id and m.deleted_at is null)`.as('last_login_at'),
+    ])
+    .orderBy('o.created_at', 'desc')
     .execute();
 }
 
@@ -24,7 +45,7 @@ export async function getOrgDetail(orgId: string) {
   const members = await db
     .selectFrom('org_memberships')
     .innerJoin('people', 'people.id', 'org_memberships.person_id')
-    .select(['people.id', 'people.email', 'people.display_name', 'people.title', 'people.phone', 'org_memberships.role', 'org_memberships.created_at'])
+    .select(['people.id', 'org_memberships.id as membership_id', 'people.email', 'people.display_name', 'people.title', 'people.phone', 'people.last_login_at', 'org_memberships.role', 'org_memberships.created_at'])
     .where('org_memberships.org_id', '=', orgId)
     .where('org_memberships.deleted_at', 'is', null)
     .execute();
@@ -38,8 +59,12 @@ export async function getOrgDetail(orgId: string) {
     .orderBy('cohorts.created_at', 'desc')
     .execute();
 
-  const [billing, invoices] = await Promise.all([billingSummary(orgId), listInvoices(orgId)]);
-  return { ...org, members, cohorts, billing: { ...billing, tiers: undefined }, invoices };
+  const [billing, invoices, invites] = await Promise.all([
+    billingSummary(orgId),
+    listInvoices(orgId),
+    db.selectFrom('invites').select(['id', 'email', 'role', 'expires_at', 'created_at']).where('org_id', '=', orgId).where('accepted_at', 'is', null).orderBy('created_at', 'desc').execute(),
+  ]);
+  return { ...org, logo_data: undefined, members, cohorts, billing: { ...billing, tiers: undefined }, invoices, invites };
 }
 
 // Model B (docs/org-onboarding-spec.md §1): a Daprova team member creates
@@ -54,7 +79,8 @@ export async function createOrgWithAdmin(
     contact_email: string;
     admin_email: string;
     admin_display_name?: string;
-    admin_password: string;
+    // Omitted: the admin gets an email from Firebase to choose their own.
+    admin_password?: string;
   },
 ) {
   const existingSlug = await db.selectFrom('organisations').select('id').where('slug', '=', opts.org_slug).executeTakeFirst();
@@ -63,7 +89,7 @@ export async function createOrgWithAdmin(
   const existingPerson = await db.selectFrom('people').select('id').where('email', '=', opts.admin_email).executeTakeFirst();
   if (existingPerson) throw conflict('A person with that email already exists');
 
-  const fbUser = await firebaseAuth.createUser({ email: opts.admin_email, password: opts.admin_password, emailVerified: true }).catch((err) => {
+  const fbUser = await firebaseAuth.createUser({ email: opts.admin_email, password: opts.admin_password ?? `${crypto.randomUUID()}Aa1!`, emailVerified: true }).catch((err) => {
     // Can legitimately happen even though the `people` check above passed —
     // e.g. a previous attempt created the Firebase account but failed
     // before its `people` row was written. Surface a clean conflict rather
@@ -97,10 +123,11 @@ export async function createOrgWithAdmin(
     actorContext: 'platform_admin',
     orgId: org.id,
     action: 'org_created_by_platform',
-    details: { admin_email: opts.admin_email },
+    details: { admin_email: opts.admin_email, password_email: !opts.admin_password },
   });
+  if (!opts.admin_password) await firebaseAuth.sendPasswordResetEmail(opts.admin_email);
 
-  return { org: { id: org.id, name: org.name, slug: org.slug }, admin: { id: person.id, email: person.email } };
+  return { org: { id: org.id, name: org.name, slug: org.slug }, admin: { id: person.id, email: person.email }, password_email_sent: !opts.admin_password };
 }
 
 // docs/org-onboarding-spec.md §7.2/§7.5 — the fraud-review queue. `support`
@@ -209,7 +236,7 @@ export async function verifyOrg(actorPersonId: string, orgId: string) {
 // deleted_at pattern closeOrg uses, since a banned registration shouldn't
 // be recoverable by just flipping a status back like a suspension is.
 // Owner-only, matching the existing suspend/close precedent.
-export async function banOrg(actorPersonId: string, orgId: string) {
+export async function banOrg(actorPersonId: string, orgId: string, reason: string) {
   await assertOrgExists(orgId);
   const updated = await db
     .updateTable('organisations')
@@ -217,7 +244,7 @@ export async function banOrg(actorPersonId: string, orgId: string) {
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();
-  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_banned', details: null });
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_banned', details: { reason } });
   return updated;
 }
 
@@ -225,7 +252,7 @@ export async function banOrg(actorPersonId: string, orgId: string) {
 // Suspension is enforced where every login-completing path already
 // converges (lib/sessionIssuance.ts's issueSession), not re-implemented
 // here — this function only flips the flag and logs it.
-export async function suspendOrg(actorPersonId: string, orgId: string) {
+export async function suspendOrg(actorPersonId: string, orgId: string, reason: string) {
   await assertOrgExists(orgId);
   const org = await db
     .updateTable('organisations')
@@ -233,11 +260,11 @@ export async function suspendOrg(actorPersonId: string, orgId: string) {
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();
-  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_suspended', details: null });
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_suspended', details: { reason } });
   return org;
 }
 
-export async function reactivateOrg(actorPersonId: string, orgId: string) {
+export async function reactivateOrg(actorPersonId: string, orgId: string, reason: string) {
   const org = await assertOrgExists(orgId);
   if (org.billing_status !== 'suspended') throw badRequest('Organisation is not currently suspended');
   const updated = await db
@@ -246,7 +273,7 @@ export async function reactivateOrg(actorPersonId: string, orgId: string) {
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();
-  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_reactivated', details: null });
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_reactivated', details: { reason } });
   return updated;
 }
 
@@ -263,6 +290,7 @@ export async function setOrgPricing(
     projected_students_per_year?: number | null;
     is_enterprise_custom?: boolean;
     custom_pricing_json?: Record<string, unknown> | null;
+    reason: string;
   },
 ) {
   const org = await assertOrgExists(orgId);
@@ -292,16 +320,23 @@ export async function setOrgPricing(
 }
 
 // Offline payment (bank transfer) or a goodwill write-off of an invoice.
-export async function settleInvoice(actorPersonId: string, invoiceId: string, action: 'mark_paid' | 'void', note?: string) {
+export async function settleInvoice(actorPersonId: string, invoiceId: string, action: 'mark_paid' | 'void', note: string) {
   const invoice = await db.selectFrom('invoices').selectAll().where('id', '=', invoiceId).where('deleted_at', 'is', null).executeTakeFirst();
   if (!invoice) throw notFound('Invoice not found');
   let updated;
+  // Anyone mid-checkout on this invoice must not be charged for it now.
+  await db
+    .updateTable('payments')
+    .set({ status: 'abandoned', failure_reason: action === 'void' ? 'Invoice voided' : 'Invoice settled offline' })
+    .where('invoice_id', '=', invoiceId)
+    .where('status', '=', 'pending')
+    .execute();
   if (action === 'mark_paid') {
-    updated = await markInvoicePaid(invoiceId, note ?? 'Marked paid by Daprova');
+    updated = await markInvoicePaid(invoiceId, note);
     if (!updated) throw badRequest(`Invoice is ${invoice.status}, not awaiting payment`);
   } else {
     if (invoice.status === 'paid') throw badRequest('A paid invoice cannot be voided');
-    updated = await db.updateTable('invoices').set({ status: 'void', notes: note ?? 'Voided by Daprova' }).where('id', '=', invoiceId).returningAll().executeTakeFirstOrThrow();
+    updated = await db.updateTable('invoices').set({ status: 'void', notes: note }).where('id', '=', invoiceId).returningAll().executeTakeFirstOrThrow();
   }
   await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId: invoice.org_id, action: action === 'void' ? 'invoice_voided' : 'invoice_marked_paid', details: { invoice_id: invoiceId, invoice_number: invoice.invoice_number, note } });
   return updated;
@@ -319,7 +354,7 @@ const VALID_BILLING_STATUSES = ['active', 'pending_manual_quote', 'suspended'] a
 // flow. Deliberately separate from suspend/reactivate above, which cover
 // the one status transition platform staff take most often and are worth
 // naming explicitly in the audit log rather than folding into this generic action.
-export async function correctBillingStatus(actorPersonId: string, orgId: string, newStatus: string) {
+export async function correctBillingStatus(actorPersonId: string, orgId: string, newStatus: string, reason: string) {
   if (!VALID_BILLING_STATUSES.includes(newStatus as (typeof VALID_BILLING_STATUSES)[number])) {
     throw badRequest(`Invalid billing status: ${newStatus}`);
   }
@@ -335,14 +370,14 @@ export async function correctBillingStatus(actorPersonId: string, orgId: string,
     actorContext: 'platform_admin',
     orgId,
     action: 'billing_status_corrected',
-    details: { old_status: org.billing_status, new_status: newStatus },
+    details: { old_status: org.billing_status, new_status: newStatus, reason },
   });
   return updated;
 }
 
 // "Extend or grant a free-trial exception" (§7.2) — goodwill: the org's
 // next cohort is free (assessment fees waived for up to 50 learners).
-export async function extendFreeTrial(actorPersonId: string, orgId: string) {
+export async function extendFreeTrial(actorPersonId: string, orgId: string, reason: string) {
   await assertOrgExists(orgId);
   const updated = await db
     .updateTable('organisations')
@@ -350,7 +385,7 @@ export async function extendFreeTrial(actorPersonId: string, orgId: string) {
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();
-  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'free_trial_extended', details: null });
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'free_trial_extended', details: { reason } });
   return updated;
 }
 
@@ -358,7 +393,7 @@ export async function extendFreeTrial(actorPersonId: string, orgId: string) {
 // the schema. Historical data (cohorts, learners, reports) is untouched;
 // only the org itself and its memberships stop being usable for login
 // (issueSession already rejects a deleted org, same as a suspended one).
-export async function closeOrg(actorPersonId: string, orgId: string) {
+export async function closeOrg(actorPersonId: string, orgId: string, reason: string) {
   await assertOrgExists(orgId);
   const updated = await db
     .updateTable('organisations')
@@ -366,6 +401,6 @@ export async function closeOrg(actorPersonId: string, orgId: string) {
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();
-  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_closed', details: null });
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId, action: 'org_closed', details: { reason } });
   return updated;
 }

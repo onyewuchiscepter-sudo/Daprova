@@ -1,11 +1,22 @@
-import { Router } from 'express';
+import crypto from 'node:crypto';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js';
 import { seedFrameworkTemplates, seedMultiCourseTemplate } from '../db/seed/frameworks.js';
+import { writeAuditLog } from '../lib/auditLog.js';
 
 export const bootstrapRouter = Router();
+
+// Every route here is gated on BOOTSTRAP_SECRET: unset, the router answers
+// 404. Compared in constant time so response timing can't leak the secret.
+function assertBootstrapSecret(req: Request) {
+  if (!env.bootstrapSecret) throw notFound();
+  const given = Buffer.from(req.headers.authorization ?? '');
+  const expected = Buffer.from(`Bearer ${env.bootstrapSecret}`);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw forbidden();
+}
 
 // POST /api/v1/bootstrap/templates — seeds the 6 competency framework
 // templates (reuses the exact same seeding logic as the local dev seed
@@ -14,9 +25,7 @@ export const bootstrapRouter = Router();
 // Same secret gate as the rest of this router.
 bootstrapRouter.post('/templates', async (req, res, next) => {
   try {
-    if (!env.bootstrapSecret) throw notFound();
-    const header = req.headers.authorization;
-    if (header !== `Bearer ${env.bootstrapSecret}`) throw forbidden();
+    assertBootstrapSecret(req);
 
     const before = await db.selectFrom('competency_frameworks').select('id').where('is_template', '=', true).execute();
     await seedFrameworkTemplates();
@@ -45,9 +54,7 @@ const bootstrapSchema = z.object({
 
 bootstrapRouter.post('/', async (req, res, next) => {
   try {
-    if (!env.bootstrapSecret) throw notFound();
-    const header = req.headers.authorization;
-    if (header !== `Bearer ${env.bootstrapSecret}`) throw forbidden();
+    assertBootstrapSecret(req);
 
     const existingOrg = await db.selectFrom('organisations').select('id').executeTakeFirst();
     if (existingOrg) throw conflict('Bootstrap already completed — an organisation already exists');
@@ -90,8 +97,10 @@ bootstrapRouter.post('/', async (req, res, next) => {
 // the same bootstrapping problem the org-bootstrap above solves for the
 // first org admin: granting platform-admin is normally an owner-only
 // platform action, but there's no platform admin yet to grant the first
-// one. Unlike the one-time org bootstrap, this is safe to call repeatedly
-// (upserts the role) — same secret gate as the rest of this router.
+// one. Like the org bootstrap it is one-time: once any owner exists it
+// refuses, and staff are managed from the platform console (Team), where
+// every change is logged. So a leaked secret can't be used to make someone
+// an owner after setup.
 const bootstrapPlatformAdminSchema = z.object({
   person_email: z.string().email(),
   platform_role: z.enum(['support', 'owner']),
@@ -99,13 +108,14 @@ const bootstrapPlatformAdminSchema = z.object({
 
 bootstrapRouter.post('/platform-admin', async (req, res, next) => {
   try {
-    if (!env.bootstrapSecret) throw notFound();
-    const header = req.headers.authorization;
-    if (header !== `Bearer ${env.bootstrapSecret}`) throw forbidden();
+    assertBootstrapSecret(req);
 
     const body = bootstrapPlatformAdminSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
     const data = body.data;
+
+    const owner = await db.selectFrom('platform_admins').select('id').where('platform_role', '=', 'owner').executeTakeFirst();
+    if (owner) throw conflict('A platform owner already exists — add or change staff from the platform console (Team).');
 
     const person = await db.selectFrom('people').selectAll().where('email', '=', data.person_email).executeTakeFirst();
     if (!person) throw notFound('No person with that email — they must sign in at least once first');
@@ -124,6 +134,12 @@ bootstrapRouter.post('/platform-admin', async (req, res, next) => {
           .returningAll()
           .executeTakeFirstOrThrow();
 
+    await writeAuditLog({
+      actorPersonId: null,
+      actorContext: 'system',
+      action: 'platform_admin_bootstrapped',
+      details: { person_id: person.id, email: person.email, platform_role: admin.platform_role },
+    });
     res.status(existing ? 200 : 201).json({ person_id: person.id, email: person.email, platform_role: admin.platform_role });
   } catch (err) {
     next(err);

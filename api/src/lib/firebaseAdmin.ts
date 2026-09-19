@@ -68,6 +68,13 @@ export const firebaseAuth = {
   // team-provisioned org creation (routes/platform.ts, against a real
   // project) — the same public signUp REST call either way, just a
   // different key/base URL depending on which `callIdentityToolkit` picks.
+  // Firebase emails the person a link to choose their own password. Used by
+  // the platform console to set up staff logins and to help a customer who
+  // is locked out, so nobody at Daprova ever handles a password.
+  async sendPasswordResetEmail(email: string): Promise<void> {
+    await callIdentityToolkit('/accounts:sendOobCode', { requestType: 'PASSWORD_RESET', email });
+  },
+
   async createUser(opts: { email: string; password: string; emailVerified?: boolean }): Promise<{ uid: string }> {
     const data = await callIdentityToolkit<{ localId: string }>('/accounts:signUp', {
       email: opts.email,

@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
 import * as shareService from '../services/shareService.js';
 import * as certificateService from '../services/certificateService.js';
+import { ENTERPRISE_THRESHOLD, FREE_TRIAL_LEARNERS, tiersForVersion } from '../services/billing/index.js';
 
 // Unauthenticated, read-only endpoints for things that are public by
 // nature: an org's logo (it appears on learner-facing pages and documents).
@@ -41,6 +42,20 @@ publicRouter.get('/share/:token', async (req, res, next) => {
 publicRouter.get('/certificates/:code', async (req, res, next) => {
   try {
     res.json(await certificateService.verifyCertificate(req.params.code));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The plans on the public homepage — read from the same pricing table the
+// billing code charges from, so the site can't drift from real prices.
+// New signups start on the newest pricing version.
+publicRouter.get('/pricing', async (_req, res, next) => {
+  try {
+    const latest = await db.selectFrom('pricing_tiers').select('pricing_version').orderBy('pricing_version', 'desc').executeTakeFirst();
+    if (!latest) throw notFound('No pricing published');
+    const tiers = await tiersForVersion(latest.pricing_version);
+    res.set('Cache-Control', 'public, max-age=300').json({ pricing_version: latest.pricing_version, free_trial_learners: FREE_TRIAL_LEARNERS, enterprise_threshold: ENTERPRISE_THRESHOLD, tiers });
   } catch (err) {
     next(err);
   }
