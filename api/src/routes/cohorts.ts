@@ -166,6 +166,18 @@ cohortsRouter.post('/:id/reports', async (req, res, next) => {
   }
 });
 
+// Preview (PRD US-16): same body as generating, returns the PDF inline and
+// saves nothing.
+cohortsRouter.post('/:id/reports/preview', async (req, res, next) => {
+  try {
+    const body = generateReportSchema.parse(req.body);
+    const { pdf, watermarked } = await reportService.previewReport(req.auth!.org_id!, req.params.id, body.template, body.narrative);
+    res.set('Content-Type', 'application/pdf').set('Content-Disposition', 'inline; filename="report-preview.pdf"').set('X-Report-Watermarked', String(watermarked)).set('Access-Control-Expose-Headers', 'X-Report-Watermarked').send(pdf);
+  } catch (err) {
+    next(err instanceof z.ZodError ? badRequest('Invalid request body', err.flatten()) : err);
+  }
+});
+
 cohortsRouter.get('/:id/reports', async (req, res, next) => {
   try {
     res.json(await reportService.listReports(req.auth!.org_id!, req.params.id));
@@ -178,7 +190,8 @@ cohortsRouter.get('/:id/reports', async (req, res, next) => {
 // banner (CohortDashboardPage.tsx) as an "Upgrade now" action.
 cohortsRouter.post('/:id/upgrade', async (req, res, next) => {
   try {
-    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id!, req.params.id));
+    const purpose = req.body?.purpose === 'feature' ? 'feature' : 'capacity';
+    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id!, req.params.id, purpose));
   } catch (err) {
     next(err);
   }

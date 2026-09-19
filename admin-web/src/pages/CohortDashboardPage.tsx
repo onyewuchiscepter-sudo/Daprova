@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { apiFetch, apiFetchBlob, API_BASE } from '../api';
+import { apiFetch, apiFetchBlob, resolveApiUrl } from '../api';
+import ReportsPanel, { type CohortPlan } from '../components/ReportsPanel';
 
 type Cohort = {
   id: string;
@@ -15,6 +16,7 @@ type Cohort = {
   post_completed: number;
   capacity_status: 'allow' | 'warn' | 'block';
   max_students: number | null;
+  plan: CohortPlan;
 };
 type LearnerRow = {
   learner_id: string;
@@ -59,9 +61,6 @@ type SatisfactionSummary = {
   nps_detractors: number;
   comments: Array<{ positive: string | null; improve: string | null; created_at: string }>;
 };
-type ReportTemplate = { key: string; label: string };
-type NarrativeFields = { background: string; challenges: string; next_steps: string };
-type ReportRecord = { id: string; funder_template: string; narrative_json: NarrativeFields; status: string; generated_at: string };
 
 // Falls back to localhost for dev; set VITE_ASSESSMENT_WEB_ORIGIN at build
 // time to the real deployed assessment-web URL (or eventually
@@ -156,78 +155,49 @@ export default function CohortDashboardPage() {
     enabled: tab === 'satisfaction',
   });
 
-  // Module 4: funder report generation. Templates rarely change, so no
-  // polling; the report history refetches after generate/regenerate via
-  // query invalidation instead.
-  const { data: templates } = useQuery<ReportTemplate[]>({
-    queryKey: ['report-templates'],
-    queryFn: () => apiFetch('/api/v1/reports/templates'),
-    enabled: tab === 'reports',
-    staleTime: Infinity,
-  });
-  const { data: reports } = useQuery<ReportRecord[]>({
-    queryKey: ['cohort-reports', id],
-    queryFn: () => apiFetch(`/api/v1/cohorts/${id}/reports`),
-    enabled: tab === 'reports',
-  });
-
   const regenerateMutation = useMutation({
     mutationFn: (type: 'pre' | 'post' | 'satisfaction') =>
       apiFetch(`/api/v1/cohorts/${id}/regenerate-link`, { method: 'POST', body: JSON.stringify({ type }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
 
-  // docs/org-onboarding-spec.md §5.6 — opens the (stub) provider's checkout
-  // page in a new tab, same as a real Paystack/Flutterwave redirect would.
-  // Re-fetches the cohort afterward so the "locked pending upgrade" banner
-  // shows up immediately rather than waiting for the next 5s poll.
+  // docs/org-onboarding-spec.md §5.6 — sends the admin to the provider's
+  // hosted checkout (Paystack/Flutterwave, or the test stub). The provider
+  // redirects back here with ?payment=<reference>, handled below.
+  // "capacity" upgrades lock the cohort until paid; "feature" upgrades
+  // (e.g. to unlock reports) don't.
   const upgradeMutation = useMutation({
-    mutationFn: () => apiFetch(`/api/v1/cohorts/${id}/upgrade`, { method: 'POST' }),
+    mutationFn: (purpose: 'capacity' | 'feature') => apiFetch(`/api/v1/cohorts/${id}/upgrade`, { method: 'POST', body: JSON.stringify({ purpose }) }),
     onSuccess: (result) => {
-      window.open(`${API_BASE}${result.checkoutUrl}`, '_blank');
       queryClient.invalidateQueries({ queryKey: ['cohort', id] });
+      // Same tab, like any hosted checkout: the gateway (or the test stub)
+      // sends the admin back here with ?payment=<reference>.
+      window.location.assign(resolveApiUrl(result.checkoutUrl));
     },
   });
 
-  const [reportForm, setReportForm] = useState<NarrativeFields>({ background: '', challenges: '', next_steps: '' });
-  const [reportTemplate, setReportTemplate] = useState('');
-  const [editingReportId, setEditingReportId] = useState<string | null>(null);
-
-  const generateReportMutation = useMutation({
-    mutationFn: () => apiFetch(`/api/v1/cohorts/${id}/reports`, { method: 'POST', body: JSON.stringify({ template: reportTemplate, narrative: reportForm }) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cohort-reports', id] });
-      setReportForm({ background: '', challenges: '', next_steps: '' });
-      setReportTemplate('');
-    },
-  });
-  const regenerateReportMutation = useMutation({
-    mutationFn: (reportId: string) => apiFetch(`/api/v1/reports/${reportId}/narrative`, { method: 'PATCH', body: JSON.stringify({ narrative: reportForm }) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cohort-reports', id] });
-      setEditingReportId(null);
-      setReportForm({ background: '', challenges: '', next_steps: '' });
-    },
-  });
-
-  function startEditingReport(report: ReportRecord) {
-    setEditingReportId(report.id);
-    setReportForm(report.narrative_json);
-  }
-  function cancelEditingReport() {
-    setEditingReportId(null);
-    setReportForm({ background: '', challenges: '', next_steps: '' });
-  }
-
-  async function downloadReport(reportId: string, format: 'pdf' | 'docx') {
-    const blob = await apiFetchBlob(`/api/v1/reports/${reportId}/download/${format}`);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `report-${reportId}.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  // Back from the payment provider: ask the API to check the payment with
+  // the provider right away, so the new plan shows without waiting for the
+  // reconciliation job.
+  const [paymentNotice, setPaymentNotice] = useState<{ tone: 'gain' | 'amber' | 'flag'; text: string } | null>(null);
+  const paymentRef = searchParams.get('payment') ?? searchParams.get('reference') ?? searchParams.get('tx_ref');
+  useEffect(() => {
+    if (!paymentRef) return;
+    const next = new URLSearchParams(searchParams);
+    for (const k of ['payment', 'reference', 'trxref', 'tx_ref', 'transaction_id', 'status']) next.delete(k);
+    setSearchParams(next, { replace: true });
+    setPaymentNotice({ tone: 'amber', text: 'Checking your payment…' });
+    apiFetch(`/api/v1/payments/${encodeURIComponent(paymentRef)}/verify`, { method: 'POST' })
+      .then((p: { status: string; target_tier: string; failure_reason: string | null }) => {
+        queryClient.invalidateQueries({ queryKey: ['cohort', id] });
+        if (p.status === 'confirmed') setPaymentNotice({ tone: 'gain', text: `Payment received — this cohort is now on the ${p.target_tier.replace('_', ' ').toLowerCase()} plan.` });
+        else if (p.status === 'pending') setPaymentNotice({ tone: 'amber', text: 'Payment is still processing. This page updates automatically once it clears (usually within a minute).' });
+        else setPaymentNotice({ tone: 'flag', text: `Payment didn't go through${p.failure_reason ? ` (${p.failure_reason})` : ''}. You can try again.` });
+      })
+      .catch((err: Error) => setPaymentNotice({ tone: 'flag', text: err.message }));
+    // Runs once per returned reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentRef]);
 
   function copyLink(token: string, basePath: 'assess' | 'satisfaction' = 'assess') {
     navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/${basePath}/${token}`);
@@ -254,7 +224,21 @@ export default function CohortDashboardPage() {
   return (
     <div>
       <h1 className="font-display font-semibold text-[26px] leading-tight tracking-[-0.015em] text-ink mb-1">{cohort.name}</h1>
-      <p className="text-sm text-ink-soft mb-6 capitalize">{cohort.status}</p>
+      <p className="text-sm text-ink-soft mb-6">
+        <span className="capitalize">{cohort.status.replace(/_/g, ' ')}</span>
+        <span className="mx-2 text-rule">|</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-sage">{cohort.plan.name} plan</span>
+      </p>
+
+      {paymentNotice && (
+        <div
+          className={`mb-6 rounded-md px-4 py-3 text-sm border ${
+            paymentNotice.tone === 'gain' ? 'bg-gain-wash text-gain-deep border-gain/20' : paymentNotice.tone === 'amber' ? 'bg-amber-wash text-ink border-amber/20' : 'bg-flag-wash text-flag border-flag/20'
+          }`}
+        >
+          {paymentNotice.text}
+        </div>
+      )}
 
       {cohort.status === 'locked_pending_upgrade' ? (
         <div className="mb-6 rounded-md px-4 py-3 text-sm bg-flag-wash text-flag border border-flag/20">
@@ -275,7 +259,7 @@ export default function CohortDashboardPage() {
             </span>
             {cohort.capacity_status === 'block' && (
               <button
-                onClick={() => upgradeMutation.mutate()}
+                onClick={() => upgradeMutation.mutate('capacity')}
                 disabled={upgradeMutation.isPending}
                 className="shrink-0 bg-gain text-white text-xs rounded px-3 py-1.5 disabled:opacity-50"
               >
@@ -547,125 +531,7 @@ export default function CohortDashboardPage() {
       )}
 
       {tab === 'reports' && (
-        <div className="space-y-6">
-          <div className="bg-paper rounded-lg border border-rule p-5">
-            <h3 className="font-display font-semibold text-[16px] tracking-[-0.01em] text-ink mb-3">{editingReportId ? 'Edit narrative & regenerate' : 'Generate a new report'}</h3>
-            <div className="space-y-3">
-              {!editingReportId && (
-                <label className="block text-xs text-ink-soft">
-                  Funder template
-                  <select
-                    className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
-                    value={reportTemplate}
-                    onChange={(e) => setReportTemplate(e.target.value)}
-                  >
-                    <option value="">Select a template…</option>
-                    {templates?.map((t) => (
-                      <option key={t.key} value={t.key}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label className="block text-xs text-ink-soft">
-                Background / theory of change
-                <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
-                  rows={2}
-                  value={reportForm.background}
-                  onChange={(e) => setReportForm({ ...reportForm, background: e.target.value })}
-                />
-              </label>
-              <label className="block text-xs text-ink-soft">
-                Challenges
-                <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
-                  rows={2}
-                  value={reportForm.challenges}
-                  onChange={(e) => setReportForm({ ...reportForm, challenges: e.target.value })}
-                />
-              </label>
-              <label className="block text-xs text-ink-soft">
-                Next steps
-                <textarea
-                  className="mt-1 block w-full border rounded px-2 py-1.5 text-sm text-ink"
-                  rows={2}
-                  value={reportForm.next_steps}
-                  onChange={(e) => setReportForm({ ...reportForm, next_steps: e.target.value })}
-                />
-              </label>
-              <div className="flex gap-2">
-                {editingReportId ? (
-                  <>
-                    <button
-                      onClick={() => regenerateReportMutation.mutate(editingReportId)}
-                      disabled={regenerateReportMutation.isPending}
-                      className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
-                    >
-                      {regenerateReportMutation.isPending ? 'Regenerating…' : 'Save & regenerate'}
-                    </button>
-                    <button onClick={cancelEditingReport} className="text-sm border rounded px-3 py-1.5">
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => generateReportMutation.mutate()}
-                    disabled={!reportTemplate || generateReportMutation.isPending}
-                    className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
-                  >
-                    {generateReportMutation.isPending ? 'Generating…' : 'Generate report'}
-                  </button>
-                )}
-              </div>
-              {generateReportMutation.isError && <p className="text-xs text-flag">{(generateReportMutation.error as Error).message}</p>}
-              {regenerateReportMutation.isError && <p className="text-xs text-flag">{(regenerateReportMutation.error as Error).message}</p>}
-            </div>
-          </div>
-
-          <div className="bg-paper rounded-lg border border-rule overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-ground text-left text-ink-soft">
-                <tr>
-                  <th className="p-3">Template</th>
-                  <th className="p-3">Generated</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {reports?.map((r) => (
-                  <tr key={r.id}>
-                    <td className="p-3">{templates?.find((t) => t.key === r.funder_template)?.label ?? r.funder_template}</td>
-                    <td className="p-3 text-ink-soft">{new Date(r.generated_at).toLocaleString()}</td>
-                    <td className="p-3 capitalize">{r.status}</td>
-                    <td className="p-3">
-                      <div className="flex gap-3">
-                        <button onClick={() => downloadReport(r.id, 'pdf')} className="text-xs text-ink underline">
-                          PDF
-                        </button>
-                        <button onClick={() => downloadReport(r.id, 'docx')} className="text-xs text-ink underline">
-                          Word
-                        </button>
-                        <button onClick={() => startEditingReport(r)} className="text-xs text-ink underline">
-                          Edit & regenerate
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {reports?.length === 0 && (
-                  <tr>
-                    <td className="p-3 text-ink-soft" colSpan={4}>
-                      No reports generated yet for this cohort.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <ReportsPanel cohortId={cohort.id} plan={cohort.plan} onUpgrade={() => upgradeMutation.mutate('feature')} upgrading={upgradeMutation.isPending} />
       )}
     </div>
   );

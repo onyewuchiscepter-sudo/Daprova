@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { DaprovaMark } from './Logo';
 
 // Shared chrome for every unauthenticated page (sign in, sign up, contact
 // sales, accept invite). The jade rule capping each card is the landing
@@ -7,8 +8,11 @@ import { Link } from 'react-router-dom';
 
 export function Wordmark({ to = '/' }: { to?: string }) {
   return (
-    <Link to={to} className="font-mono font-semibold text-[15px] tracking-[0.02em] text-ink no-underline">
-      daprova<span className="text-gain">.</span>
+    <Link to={to} className="inline-flex items-center gap-2 font-mono font-semibold text-[15px] tracking-[0.02em] text-ink no-underline">
+      <DaprovaMark size={22} />
+      <span>
+        daprova<span className="text-gain">.</span>
+      </span>
     </Link>
   );
 }

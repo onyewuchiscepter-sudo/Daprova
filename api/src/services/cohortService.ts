@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import { assignTierForNewCohort, checkCapacity } from './pricingService.js';
+import { assignTierForNewCohort, checkCapacity, getCohortPlan } from './pricingService.js';
 import * as frameworkService from './frameworkService.js';
 
 // Three ways to create a course, matching the Framework -> Course hierarchy
@@ -156,9 +156,11 @@ export async function getCohort(orgId: string, cohortId: string) {
   // reader to be meaningful; the cohort detail view is the natural place
   // since the admin dashboard already fetches it per cohort.
   const capacity = await checkCapacity(cohortId);
+  const plan = await getCohortPlan(cohort.plan_tier_at_creation);
 
   return {
     ...cohort,
+    plan,
     total_enrolled: Number(enrolled.count),
     pre_completed: Number(preCompleted.count),
     post_completed: Number(postCompleted.count),

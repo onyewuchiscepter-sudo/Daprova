@@ -30,7 +30,9 @@ reportsRouter.get('/:id/download/:format', async (req, res, next) => {
     if (format !== 'pdf' && format !== 'docx') throw badRequest('Format must be pdf or docx');
     const buf = await reportService.getReportFile(req.auth!.org_id!, req.params.id, format);
     res.setHeader('Content-Type', CONTENT_TYPES[format]);
-    res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.id}.${format}"`);
+    // ?inline=1 opens the PDF in the browser's viewer (preview) instead of saving it.
+    const disposition = format === 'pdf' && req.query.inline === '1' ? 'inline' : 'attachment';
+    res.setHeader('Content-Disposition', `${disposition}; filename="report-${req.params.id}.${format}"`);
     res.send(buf);
   } catch (err) {
     next(err);

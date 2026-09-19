@@ -1,4 +1,5 @@
 import PDFDocument from '@foliojs-fork/pdfkit';
+import type { Branding } from '../../../lib/branding.js';
 
 // Shared drawing helpers built on pdfkit's imperative API (no external font
 // files needed — using the 14 standard PDF fonts built into every reader,
@@ -11,6 +12,66 @@ import PDFDocument from '@foliojs-fork/pdfkit';
 const MARGIN = 50;
 const PAGE_WIDTH = 595.28; // A4 at 72dpi
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
+// Per-document accent colour (the org's brand colour, or Daprova's) —
+// used for section titles and the header rule.
+const accents = new WeakMap<PDFKit.PDFDocument, string>();
+export function setAccent(doc: PDFKit.PDFDocument, color: string) {
+  accents.set(doc, color);
+}
+const accentOf = (doc: PDFKit.PDFDocument) => accents.get(doc) ?? '#000';
+
+// Logo strip at the very top of page 1. With custom branding it's the
+// org's logo plus a small "measured with Daprova" credit; otherwise
+// Daprova's own mark and name.
+export function drawBrandBar(doc: PDFKit.PDFDocument, branding: Branding) {
+  const top = doc.page.margins.top;
+  doc.image(branding.logo.data, MARGIN, top, { fit: [160, 40], valign: 'center' });
+  if (branding.custom) {
+    doc.fontSize(8).font('Helvetica').fillColor('#888').text('Measured with Daprova', MARGIN, top + 16, { width: CONTENT_WIDTH, align: 'right' });
+  } else {
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('#12212e').text('daprova', MARGIN + 48, top + 12, { width: 200, continued: true }).fillColor(branding.color).text('.');
+  }
+  doc.fillColor('#000');
+  doc.y = top + 58;
+}
+
+// Footer on every page, drawn after the content so the total page count is
+// known (the document is created with bufferPages: true).
+export function drawFooters(doc: PDFKit.PDFDocument, branding: Branding) {
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const bottomMargin = doc.page.margins.bottom;
+    // Writing inside the bottom margin would otherwise make pdfkit add a page.
+    doc.page.margins.bottom = 0;
+    const y = doc.page.height - 34;
+    doc.moveTo(MARGIN, y - 6).lineTo(MARGIN + CONTENT_WIDTH, y - 6).strokeColor(branding.color).lineWidth(0.75).stroke();
+    const left = branding.custom ? `${branding.orgName} · Measured with Daprova` : 'Generated with Daprova';
+    doc.fontSize(8).font('Helvetica').fillColor('#888').text(left, MARGIN, y, { width: CONTENT_WIDTH / 2, lineBreak: false });
+    doc.text(`Page ${i - range.start + 1} of ${range.count}`, MARGIN + CONTENT_WIDTH / 2, y, { width: CONTENT_WIDTH / 2, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = bottomMargin;
+  }
+  doc.fillColor('#000').lineWidth(1);
+}
+
+// Diagonal watermark on every page — used for previews of cohorts whose
+// plan doesn't include downloadable reports.
+export function drawWatermark(doc: PDFKit.PDFDocument, text: string) {
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const bottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    const { width, height } = doc.page;
+    doc.save();
+    doc.rotate(-35, { origin: [width / 2, height / 2] });
+    doc.fontSize(72).font('Helvetica-Bold').fillColor('#000').fillOpacity(0.07).text(text, 0, height / 2 - 40, { width, align: 'center', lineBreak: false });
+    doc.restore();
+    doc.fillOpacity(1).fillColor('#000');
+    doc.page.margins.bottom = bottomMargin;
+  }
+}
 
 export function newDocument(): PDFKit.PDFDocument {
   return new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
@@ -43,13 +104,15 @@ export function drawReportHeader(doc: PDFKit.PDFDocument, opts: { templateTitle:
   doc.text(opts.dateRange, MARGIN, doc.y, { width: CONTENT_WIDTH });
   doc.fillColor('#000');
   doc.moveDown(1);
-  doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor('#ccc').stroke();
+  doc.moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).strokeColor(accentOf(doc)).lineWidth(1.5).stroke();
+  doc.lineWidth(1);
   doc.moveDown(1);
 }
 
 export function drawSectionTitle(doc: PDFKit.PDFDocument, title: string) {
   ensureSpace(doc, 40);
-  doc.fontSize(14).font('Helvetica-Bold').text(title, MARGIN, doc.y, { width: CONTENT_WIDTH });
+  doc.fontSize(14).font('Helvetica-Bold').fillColor(accentOf(doc)).text(title, MARGIN, doc.y, { width: CONTENT_WIDTH });
+  doc.fillColor('#000');
   doc.moveDown(0.5);
   doc.font('Helvetica').fontSize(10);
 }

@@ -54,6 +54,16 @@ export const env = {
   // proxy and the per-IP rate limits become one shared global bucket.
   // A hop count ("1") or "true"; see https://expressjs.com/en/guide/behind-proxies.html
   trustProxy: process.env.TRUST_PROXY,
+  // Payments (services/payments). Which provider new checkouts use:
+  // "paystack" | "flutterwave" | "stub". Unset picks the first provider
+  // whose secret key is present, falling back to the stub so the upgrade
+  // flow still works end-to-end before real keys exist.
+  paymentProvider: process.env.PAYMENT_PROVIDER,
+  paystackSecretKey: process.env.PAYSTACK_SECRET_KEY,
+  flutterwaveSecretKey: process.env.FLUTTERWAVE_SECRET_KEY,
+  // Flutterwave signs webhooks with a shared "secret hash" you choose in
+  // its dashboard (Settings → Webhooks), sent back as the verif-hash header.
+  flutterwaveWebhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH,
 };
 
 // Never serve production traffic on known dev secrets or against the emulator.

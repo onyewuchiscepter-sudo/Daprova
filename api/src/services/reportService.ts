@@ -5,7 +5,7 @@ import { buildReportDataContract, type NarrativeFields } from './reportDataServi
 import { renderReportPdf } from './reports/pdf/index.js';
 import { renderReportDocx } from './reports/docx/index.js';
 import type { FunderTemplateKey } from './reports/templateRegistry.js';
-import { assertFeature } from './pricingService.js';
+import { assertFeature, hasFeature } from './pricingService.js';
 
 const REPORT_LIST_COLUMNS = ['id', 'cohort_id', 'funder_template', 'narrative_json', 'status', 'generated_at'] as const;
 
@@ -35,6 +35,16 @@ export async function generateReport(orgId: string, cohortId: string, templateKe
     })
     .returning(REPORT_LIST_COLUMNS)
     .executeTakeFirstOrThrow();
+}
+
+// PRD US-16 — see the report before generating/downloading it. Renders the
+// PDF only, stores nothing. Available on every tier so an org can see what
+// the Growth plan gets them: without exportable_reports it's watermarked.
+export async function previewReport(orgId: string, cohortId: string, templateKey: FunderTemplateKey, narrative: NarrativeFields) {
+  const data = await buildReportDataContract(orgId, cohortId, narrative);
+  const canExport = await hasFeature(orgId, cohortId, 'exportable_reports');
+  const pdf = await renderReportPdf(templateKey, data, canExport ? {} : { watermark: 'PREVIEW' });
+  return { pdf, watermarked: !canExport };
 }
 
 async function assertCohortInOrg(orgId: string, cohortId: string) {

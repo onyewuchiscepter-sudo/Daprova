@@ -1,4 +1,5 @@
 import { db } from '../db/index.js';
+import { brandingForCohort, type Branding } from '../lib/branding.js';
 import { notFound } from '../lib/errors.js';
 import * as analyticsService from './analyticsService.js';
 import type { EquityDimension } from './analyticsService.js';
@@ -10,6 +11,9 @@ export type NarrativeFields = { background: string; challenges: string; next_ste
 // built) are null, not omitted, so every template can safely branch on them.
 export type ReportDataContract = {
   org: { name: string; logo_url: string | null };
+  // Logo/colour to render with — the org's own when the cohort's tier
+  // includes custom_branding, otherwise Daprova's (lib/branding.ts).
+  branding: Branding;
   cohort: {
     name: string;
     course_name: string;
@@ -92,6 +96,7 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
   ]);
 
   const passThreshold = Number(cohort.pass_threshold);
+  const branding = await brandingForCohort(orgId, cohortId);
   const [gains, effectSize, competencyBreakdown, passRate, byGender, byLocation, byAgeGroup, confidence, satisfaction] = await Promise.all([
     analyticsService.getMeanGain(cohortId),
     analyticsService.getCohensD(cohortId),
@@ -114,6 +119,7 @@ export async function buildReportDataContract(orgId: string, cohortId: string, n
 
   return {
     org: { name: cohort.org_name, logo_url: cohort.logo_url },
+    branding,
     cohort: {
       name: cohort.cohort_name,
       course_name: cohort.course_name,

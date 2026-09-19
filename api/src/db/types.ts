@@ -23,6 +23,10 @@ export interface OrganisationsTable {
   reports_to_funder: Generated<boolean>;
   reports_to_funder_name: string | null;
   referral_source: string | null;
+  brand_color: string | null;
+  logo_data: Buffer | null;
+  logo_mime: string | null;
+  logo_updated_at: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -283,6 +287,16 @@ export interface PaymentsTable {
   target_tier: string;
   paid_at: Timestamp | null;
   created_at: Generated<Timestamp>;
+  purpose: Generated<string>; // capacity | feature
+  checkout_url: string | null;
+  provider_transaction_id: string | null;
+  failure_reason: string | null;
+}
+
+export interface PaymentStubStateTable {
+  reference: string;
+  status: Generated<string>; // pending | success | failed
+  updated_at: Generated<Timestamp>;
 }
 
 export interface SignupFraudFlagsTable {
@@ -307,6 +321,7 @@ export interface Database {
   cohort_tier_history: CohortTierHistoryTable;
   signup_fraud_flags: SignupFraudFlagsTable;
   payments: PaymentsTable;
+  payment_stub_state: PaymentStubStateTable;
   impersonation_sessions: ImpersonationSessionsTable;
   refresh_tokens: RefreshTokensTable;
   courses: CoursesTable;

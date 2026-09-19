@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import { db } from '../db/index.js';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlatformRole } from '../middleware/platformAuth.js';
 import { badRequest } from '../lib/errors.js';
 import * as platformService from '../services/platformService.js';
 import { reconcilePendingPayments } from '../services/paymentService.js';
+import { providerStatus } from '../services/payments/index.js';
 
 export const platformRouter = Router();
 platformRouter.use(requireAuth, requirePlatformRole('support', 'owner'));
@@ -61,6 +63,29 @@ platformRouter.post('/orgs', async (req, res, next) => {
 platformRouter.post('/payments/reconcile', async (_req, res, next) => {
   try {
     res.json(await reconcilePendingPayments());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Which payment gateway new checkouts use and whether each has its keys —
+// booleans only, never the keys themselves.
+platformRouter.get('/payments/providers', (_req, res) => {
+  res.json(providerStatus());
+});
+
+// The 50 most recent payments across every org.
+platformRouter.get('/payments', async (_req, res, next) => {
+  try {
+    res.json(
+      await db
+        .selectFrom('payments')
+        .innerJoin('organisations', 'organisations.id', 'payments.org_id')
+        .select(['payments.reference', 'payments.amount', 'payments.status', 'payments.provider', 'payments.target_tier', 'payments.purpose', 'payments.created_at', 'payments.paid_at', 'payments.failure_reason', 'organisations.name as org_name'])
+        .orderBy('payments.created_at', 'desc')
+        .limit(50)
+        .execute(),
+    );
   } catch (err) {
     next(err);
   }

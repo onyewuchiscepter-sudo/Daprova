@@ -113,6 +113,24 @@ export async function checkCapacity(cohortId: string): Promise<{ status: Capacit
   return { status: 'allow', studentCount: cohort.student_count, maxStudents: tier.max_students };
 }
 
+const ALL_FEATURES = ['auto_scoring', 'basic_pre_post_comparison', 'exportable_reports', 'custom_branding', 'advanced_analytics', 'api_integration', 'priority_support', 'offline_deployment'];
+
+// A cohort's plan as the UI needs it: what it has, and what the next rung
+// costs (for upgrade prompts). Pre-pricing cohorts have no tier and are
+// grandfathered with every feature.
+export async function getCohortPlan(tierId: string | null) {
+  if (!tierId) return { tier_id: null, name: 'Legacy (all features)', features: ALL_FEATURES, next_tier: null };
+  const tier = await getTier(tierId);
+  let next: { tier_id: string; name: string; price: number | null } | null = null;
+  try {
+    const n = await getNextTier(tierId);
+    next = { tier_id: n.tier_id, name: n.name, price: n.price === null ? null : Number(n.price) };
+  } catch {
+    next = null;
+  }
+  return { tier_id: tier.tier_id, name: tier.name, features: tier.features, next_tier: next };
+}
+
 export async function assertCapacityAvailable(cohortId: string) {
   const capacity = await checkCapacity(cohortId);
   if (capacity.status === 'block') {

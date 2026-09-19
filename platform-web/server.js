@@ -16,7 +16,7 @@ const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY ?? '';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'daprova-dev';
 const FIREBASE_AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '';
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 const server = http.createServer((req, res) => {
   const urlPath = req.url.split('?')[0];

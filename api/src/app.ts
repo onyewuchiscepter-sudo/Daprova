@@ -17,6 +17,7 @@ import { invitesRouter } from './routes/invites.js';
 import { signupRouter } from './routes/signup.js';
 import { paymentsRouter } from './routes/payments.js';
 import { impersonationRouter } from './routes/impersonation.js';
+import { publicRouter } from './routes/public.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 
@@ -24,6 +25,12 @@ import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 // and worker.ts (Cloudflare Workers). Nothing here may do I/O at import time
 // — Workers forbids it outside a request.
 export const app = express();
+// Binary columns never belong in a JSON response. Many queries return whole
+// organisations rows (selectAll/returningAll); this drops the stored logo
+// bytes (served on their own at /api/v1/public/orgs/:id/logo) and report
+// files everywhere at once instead of relying on every query to omit them.
+const BINARY_COLUMNS = new Set(['logo_data', 'pdf_data', 'docx_data']);
+app.set('json replacer', (key: string, value: unknown) => (BINARY_COLUMNS.has(key) ? undefined : value));
 if (env.trustProxy) {
   app.set('trust proxy', /^\d+$/.test(env.trustProxy) ? Number(env.trustProxy) : env.trustProxy === 'true');
 }
@@ -35,7 +42,16 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
+// rawBody is kept for webhook signature checks (Paystack signs the exact
+// bytes it sent). 1 MB covers a base64 logo upload (capped at 300 KB).
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+      (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(cookieParser());
 
 app.use(healthRouter);
@@ -54,5 +70,6 @@ app.use('/api/v1/invites', publicLimiter, invitesRouter);
 app.use('/api/v1/orgs', publicLimiter, signupRouter);
 app.use('/api/v1/payments', publicLimiter, paymentsRouter);
 app.use('/api/v1/impersonation', adminLimiter, impersonationRouter);
+app.use('/api/v1/public', publicLimiter, publicRouter);
 
 app.use(errorHandler);

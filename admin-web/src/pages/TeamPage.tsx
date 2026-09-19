@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../api';
 import { useAuth } from '../auth';
+import BrandingCard from '../components/BrandingCard';
 
 type Member = { id: string; email: string; display_name: string | null; role: 'admin' | 'viewer'; created_at: string };
 type PendingInvite = { id: string; email: string; role: 'admin' | 'viewer'; expires_at: string; created_at: string };
@@ -12,6 +13,7 @@ export default function TeamPage() {
   const queryClient = useQueryClient();
 
   const { data } = useQuery<TeamData>({ queryKey: ['org-users'], queryFn: () => apiFetch('/api/v1/org/users') });
+  const adminCount = data?.members.filter((m) => m.role === 'admin').length ?? 0;
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'viewer'>('viewer');
@@ -82,6 +84,8 @@ export default function TeamPage() {
         </button>
       </div>
 
+      <BrandingCard />
+
       <div className="bg-paper rounded-lg border border-rule p-5">
         <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mb-3">Invite a teammate</h2>
         <div className="flex gap-2 items-end mb-2">
@@ -128,14 +132,20 @@ export default function TeamPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {data?.members.map((m) => (
+            {data?.members.map((m) => {
+              // Last-admin protection (also enforced by the API): the only
+              // admin can't be demoted or removed until someone else is admin.
+              const soleAdmin = m.role === 'admin' && adminCount === 1;
+              return (
               <tr key={m.id}>
                 <td className="p-3">{m.email}</td>
                 <td className="p-3">{m.display_name ?? '—'}</td>
                 <td className="p-3">
                   <select
-                    className="border rounded px-1.5 py-1 text-xs capitalize"
+                    className="border rounded px-1.5 py-1 text-xs capitalize disabled:opacity-60"
                     value={m.role}
+                    disabled={soleAdmin}
+                    title={soleAdmin ? 'The only admin — make someone else an admin first' : undefined}
                     onChange={(e) => roleMutation.mutate({ id: m.id, role: e.target.value as 'admin' | 'viewer' })}
                   >
                     <option value="admin">Admin</option>
@@ -143,12 +153,20 @@ export default function TeamPage() {
                   </select>
                 </td>
                 <td className="p-3">
-                  <button onClick={() => removeMutation.mutate(m.id)} className="text-xs text-flag hover:underline">
-                    Remove
-                  </button>
+                  {soleAdmin ? (
+                    <span className="text-xs text-sage">Only admin</span>
+                  ) : (
+                    <button
+                      onClick={() => window.confirm(`Remove ${m.email} from this organisation?`) && removeMutation.mutate(m.id)}
+                      className="text-xs text-flag hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         {roleMutation.isError && <p className="text-xs text-flag p-3">{(roleMutation.error as Error).message}</p>}

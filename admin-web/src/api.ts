@@ -48,3 +48,22 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
   }
   return res.blob();
 }
+
+// POST that answers with a file (report previews): returns the Blob plus
+// response headers, since some previews describe themselves in headers.
+export async function apiPostBlob(path: string, body: unknown): Promise<{ blob: Blob; headers: Headers }> {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (sessionToken) headers.set('Authorization', `Bearer ${sessionToken}`);
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(err?.error?.message ?? `Request failed: ${res.status}`, err?.error?.details);
+  }
+  return { blob: await res.blob(), headers: res.headers };
+}
+
+// Checkout URLs are absolute for real providers (Paystack/Flutterwave) and
+// API-relative for the test stub.
+export function resolveApiUrl(url: string): string {
+  return /^https?:\/\//.test(url) ? url : `${API_BASE}${url}`;
+}

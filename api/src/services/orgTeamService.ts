@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { sql } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { db } from '../db/index.js';
+import type { Database } from '../db/types.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { sendInviteEmail } from '../lib/email.js';
 import { writeAuditLog } from '../lib/auditLog.js';
@@ -123,32 +124,43 @@ export async function acceptInvite(token: string, authUid: string, email: string
 }
 
 // Last-admin protection (docs/org-onboarding-spec.md §9.2) — never leave an
-// org with zero admins.
-async function assertNotLastAdmin(orgId: string, membershipId: string) {
-  const membership = await db.selectFrom('org_memberships').selectAll().where('id', '=', membershipId).where('org_id', '=', orgId).executeTakeFirst();
-  if (!membership) throw notFound('Member not found');
-  if (membership.role !== 'admin') return;
-
-  const adminCount = await db
+// org with zero admins. Runs inside the caller's transaction and locks the
+// org's admin rows, so two admins demoting/removing each other at the same
+// moment can't both pass the check and leave the org adminless.
+async function assertNotLastAdmin(trx: Transaction<Database>, orgId: string, membershipId: string) {
+  const admins = await trx
     .selectFrom('org_memberships')
-    .select(({ fn }) => fn.countAll().as('count'))
+    .select(['id'])
     .where('org_id', '=', orgId)
     .where('role', '=', 'admin')
     .where('deleted_at', 'is', null)
-    .executeTakeFirstOrThrow();
-  if (Number(adminCount.count) <= 1) throw badRequest('Cannot remove the last admin of an organisation');
+    .forUpdate()
+    .execute();
+
+  const membership = await trx
+    .selectFrom('org_memberships')
+    .select(['role'])
+    .where('id', '=', membershipId)
+    .where('org_id', '=', orgId)
+    .where('deleted_at', 'is', null)
+    .executeTakeFirst();
+  if (!membership) throw notFound('Member not found');
+  if (membership.role !== 'admin') return;
+  if (admins.length <= 1) throw badRequest('Cannot remove the last admin of an organisation — make someone else an admin first.');
 }
 
 export async function changeRole(orgId: string, membershipId: string, newRole: 'admin' | 'viewer', actorPersonId: string) {
-  if (newRole !== 'admin') await assertNotLastAdmin(orgId, membershipId);
-
-  const membership = await db
-    .updateTable('org_memberships')
-    .set({ role: newRole })
-    .where('id', '=', membershipId)
-    .where('org_id', '=', orgId)
-    .returningAll()
-    .executeTakeFirst();
+  const membership = await db.transaction().execute(async (trx) => {
+    if (newRole !== 'admin') await assertNotLastAdmin(trx, orgId, membershipId);
+    return trx
+      .updateTable('org_memberships')
+      .set({ role: newRole })
+      .where('id', '=', membershipId)
+      .where('org_id', '=', orgId)
+      .where('deleted_at', 'is', null)
+      .returningAll()
+      .executeTakeFirst();
+  });
   if (!membership) throw notFound('Member not found');
 
   await writeAuditLog({
@@ -162,8 +174,10 @@ export async function changeRole(orgId: string, membershipId: string, newRole: '
 }
 
 export async function removeMember(orgId: string, membershipId: string, actorPersonId: string) {
-  await assertNotLastAdmin(orgId, membershipId);
-  await db.updateTable('org_memberships').set({ deleted_at: new Date() }).where('id', '=', membershipId).where('org_id', '=', orgId).execute();
+  await db.transaction().execute(async (trx) => {
+    await assertNotLastAdmin(trx, orgId, membershipId);
+    await trx.updateTable('org_memberships').set({ deleted_at: new Date() }).where('id', '=', membershipId).where('org_id', '=', orgId).execute();
+  });
 
   await writeAuditLog({
     actorPersonId,

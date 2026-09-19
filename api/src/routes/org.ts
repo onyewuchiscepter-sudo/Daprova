@@ -7,6 +7,8 @@ import { requireRole } from '../middleware/rbac.js';
 import { requireVerified } from '../middleware/orgVerification.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import * as orgTeamService from '../services/orgTeamService.js';
+import { orgLogoPath, parseBrandColor, parseLogoDataUrl } from '../lib/branding.js';
+import { sql } from 'kysely';
 
 export const orgRouter = Router();
 
@@ -49,7 +51,8 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
       id: org.id,
       name: org.name,
       slug: org.slug,
-      logo_url: org.logo_url,
+      logo_url: org.logo_data ? orgLogoPath(org.id, org.logo_updated_at as unknown as string) : org.logo_url,
+      brand_color: org.brand_color,
       contact_email: org.contact_email,
       verification_status: org.verification_status,
     });
@@ -90,6 +93,39 @@ orgRouter.patch('/org', requireAuth, requireRole('admin'), requireVerified, asyn
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
     const org = await orgTeamService.updateOrgProfile(req.auth!.org_id!, body.data);
     res.json({ id: org.id, name: org.name, slug: org.slug, logo_url: org.logo_url, contact_email: org.contact_email });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/v1/org/branding — the org's own logo and accent colour. Stored
+// for every org; applied to a cohort's reports, assessment pages and
+// certificates only when that cohort's tier includes custom_branding
+// (lib/branding.ts). logo: a PNG/JPEG data URL, or null to remove it.
+const brandingSchema = z.object({
+  brand_color: z.string().nullable().optional(),
+  logo: z.string().nullable().optional(),
+});
+orgRouter.put('/org/branding', requireAuth, requireRole('admin'), async (req, res, next) => {
+  try {
+    const body = brandingSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    const set: Record<string, unknown> = { updated_at: sql`now()` };
+    if (body.data.brand_color !== undefined) set.brand_color = body.data.brand_color === null ? null : parseBrandColor(body.data.brand_color);
+    if (body.data.logo !== undefined) {
+      const logo = body.data.logo === null ? null : parseLogoDataUrl(body.data.logo);
+      Object.assign(set, { logo_data: logo?.data ?? null, logo_mime: logo?.mime ?? null, logo_updated_at: sql`now()` });
+    }
+    const org = await db
+      .updateTable('organisations')
+      .set(set)
+      .where('id', '=', req.auth!.org_id!)
+      .returning(['id', 'brand_color', 'logo_updated_at', 'logo_mime'])
+      .executeTakeFirstOrThrow();
+    res.json({
+      brand_color: org.brand_color,
+      logo_url: org.logo_mime ? orgLogoPath(org.id, org.logo_updated_at as unknown as string) : null,
+    });
   } catch (err) {
     next(err);
   }

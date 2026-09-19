@@ -17,7 +17,7 @@ if (process.env.CF_PAGES && !process.env.API_BASE_URL) {
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out);
-for (const file of ['index.html', 'app.js', 'style.css', 'teachable-stub.html', '_redirects', '_headers']) {
+for (const file of ['index.html', 'app.js', 'style.css', 'teachable-stub.html', 'daprova-mark.svg', '_redirects', '_headers']) {
   fs.copyFileSync(path.join(__dirname, file), path.join(out, file));
 }
 fs.writeFileSync(path.join(out, 'config.js'), `window.DAPROVA_API_BASE = ${JSON.stringify(API_BASE_URL)};\n`);

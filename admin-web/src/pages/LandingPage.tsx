@@ -1,4 +1,5 @@
 import { Link, Navigate } from 'react-router-dom';
+import { DaprovaMark } from '../components/Logo';
 import { useAuth } from '../auth';
 import './LandingPage.css';
 
@@ -80,8 +81,11 @@ export default function LandingPage() {
     <div className="dp-root">
       <header className="dp-header">
         <div className="dp-wrap dp-header-inner">
-          <span className="dp-mark">
-            daprova<span>.</span>
+          <span className="dp-mark" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <DaprovaMark size={24} />
+            <span>
+              daprova<span>.</span>
+            </span>
           </span>
           <nav className="dp-nav">
             <Link to="/login" className="dp-link">

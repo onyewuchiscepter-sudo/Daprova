@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
+import { DaprovaMark } from './components/Logo';
 
 const NAV = [
   { to: '/courses', label: 'Courses' },
   { to: '/cohorts', label: 'Cohorts' },
   { to: '/frameworks', label: 'Frameworks' },
-  { to: '/team', label: 'Team' },
+  { to: '/team', label: 'Settings' },
 ];
 
 // The app shell is deliberately quieter than the landing page: same palette
@@ -68,8 +69,11 @@ export default function Layout() {
       <header className="bg-paper border-b border-rule">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
           <div className="flex items-center gap-7 min-w-0">
-            <span className="font-mono font-semibold text-[15px] tracking-[0.02em] text-ink shrink-0">
-              daprova<span className="text-gain">.</span>
+            <span className="inline-flex items-center gap-2 font-mono font-semibold text-[15px] tracking-[0.02em] text-ink shrink-0">
+              <DaprovaMark size={22} />
+              <span>
+                daprova<span className="text-gain">.</span>
+              </span>
             </span>
             <nav className="flex items-center gap-6">
               {NAV.map((item) => (

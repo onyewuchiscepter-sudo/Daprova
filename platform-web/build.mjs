@@ -25,7 +25,7 @@ const config = {
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out);
-for (const file of ['index.html', 'app.js', 'style.css', '_headers']) {
+for (const file of ['index.html', 'app.js', 'style.css', 'daprova-mark.svg', '_headers']) {
   fs.copyFileSync(path.join(__dirname, file), path.join(out, file));
 }
 fs.writeFileSync(
