@@ -4,8 +4,8 @@ import { db } from '../db/index.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { lockCourseIfNeeded } from './frameworkService.js';
 import { evaluateSubmission } from './dataQualityService.js';
-import { assertCapacityAvailable } from './pricingService.js';
 import { brandingForCohortId } from '../lib/branding.js';
+import { hasFeature } from './billing/index.js';
 
 async function resolveCohortByToken(cohortToken: string) {
   const cohort = await db
@@ -37,6 +37,8 @@ export async function startSession(
   },
 ) {
   const { cohort, sessionType } = await resolveCohortByToken(cohortToken);
+  // A finalised cohort's results (and invoice) are fixed.
+  if (cohort.finalized_at || cohort.status === 'closed') throw badRequest('This assessment has closed. Contact your programme if you think this is a mistake.');
 
   let learner = opts.learner_token
     ? await db.selectFrom('learners').selectAll().where('learner_token', '=', opts.learner_token).where('cohort_id', '=', cohort.id).executeTakeFirst()
@@ -59,12 +61,6 @@ export async function startSession(
     if (opts.learner_token && !opts.display_name) {
       throw notFound('No learner found for this link on this device.');
     }
-
-    // docs/org-onboarding-spec.md §5.4 — a brand new learner is exactly the
-    // "add a student to a cohort" action the plan's student cap gates.
-    // Checked here rather than in the admin-facing cohort endpoints, since
-    // this public link is the only place enrollment actually happens.
-    await assertCapacityAvailable(cohort.id);
 
     learner = await db
       .insertInto('learners')
@@ -147,6 +143,7 @@ async function resolveLearnerSession(cohortToken: string, learnerToken: string) 
     .where('cohort_id', '=', cohort.id)
     .executeTakeFirst();
   if (!learner) throw notFound('Learner not found for this assessment link');
+  if (cohort.finalized_at || cohort.status === 'closed') throw badRequest('This assessment has closed. Contact your programme if you think this is a mistake.');
 
   const session = await db
     .selectFrom('assessment_sessions')
@@ -420,8 +417,17 @@ export async function submitSatisfaction(cohortToken: string, learnerToken: stri
 // asking what changed. Same identify-by-enrolment-ID flow as satisfaction.
 
 async function resolveCohortByTracerToken(cohortToken: string) {
-  const cohort = await db.selectFrom('cohorts').selectAll().where('tracer_link_token', '=', cohortToken).where('deleted_at', 'is', null).executeTakeFirst();
+  const cohort = await db
+    .selectFrom('cohorts')
+    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
+    .selectAll('cohorts')
+    .select('courses.org_id')
+    .where('cohorts.tracer_link_token', '=', cohortToken)
+    .where('cohorts.deleted_at', 'is', null)
+    .executeTakeFirst();
   if (!cohort) throw notFound('Follow-up survey link not found or has been invalidated');
+  // Pricing spec §5: the tracer survey is a Growth+ feature.
+  if (!(await hasFeature(cohort.org_id, 'tracer_survey'))) throw notFound('This follow-up survey is not available.');
   return cohort;
 }
 
@@ -493,12 +499,13 @@ export async function getLinkInfo(token: string) {
 
   const kind =
     cohort.pre_link_token === token ? 'pre' : cohort.post_link_token === token ? 'post' : cohort.satisfaction_link_token === token ? 'satisfaction' : 'tracer';
+  if (kind === 'tracer') await resolveCohortByTracerToken(token);
   const branding = await brandingForCohortId(cohort.id);
   return {
     kind,
     org_name: cohort.org_name,
     course_name: cohort.course_name,
     cohort_name: cohort.cohort_name,
-    branding: { custom: branding.custom, color: branding.color, logo_url: branding.logoUrl },
+    branding: { custom: branding.custom, white_label: branding.whiteLabel, color: branding.color, logo_url: branding.logoUrl },
   };
 }

@@ -11,7 +11,7 @@ export interface OrganisationsTable {
   contact_email: string;
   country: Generated<string>;
   has_used_free_trial: Generated<boolean>;
-  billing_status: Generated<string>; // active | locked_pending_upgrade | pending_manual_quote | suspended
+  billing_status: Generated<string>; // active | pending_manual_quote | suspended
   signup_review_status: string | null; // null | flagged
   verification_status: Generated<string>; // pending | verified | banned — separate axis from billing_status
   org_type: string | null;
@@ -27,6 +27,17 @@ export interface OrganisationsTable {
   logo_data: Buffer | null;
   logo_mime: string | null;
   logo_updated_at: Timestamp | null;
+  pricing_tier: Generated<string>; // starter | growth | scale | enterprise
+  tier_effective_date: Generated<Timestamp>;
+  billing_frequency: Generated<string>; // monthly | per_cohort_cycle
+  pricing_version: Generated<string>;
+  is_enterprise_custom: Generated<boolean>;
+  custom_pricing_json: unknown | null;
+  projected_students_per_year: number | null;
+  free_cohorts_remaining: Generated<number>;
+  billing_started_at: Timestamp | null;
+  current_period_start: Timestamp | null;
+  pending_tier: string | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -135,6 +146,7 @@ export interface CohortsTable {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   tracer_link_token: Generated<string>;
+  finalized_at: Timestamp | null;
 }
 
 export interface LearnersTable {
@@ -289,15 +301,16 @@ export interface ImpersonationSessionsTable {
 export interface PaymentsTable {
   id: Generated<string>;
   org_id: string;
-  cohort_id: string;
+  cohort_id: string | null;
   amount: string;
   status: Generated<string>; // pending | confirmed | failed
   provider: string; // paystack | flutterwave | stub
   reference: string;
-  target_tier: string;
+  target_tier: string | null;
   paid_at: Timestamp | null;
   created_at: Generated<Timestamp>;
-  purpose: Generated<string>; // capacity | feature
+  purpose: Generated<string>; // capacity | feature | invoice
+  invoice_id: string | null;
   checkout_url: string | null;
   provider_transaction_id: string | null;
   failure_reason: string | null;
@@ -345,6 +358,47 @@ export interface CohortShareLinksTable {
 }
 
 
+export interface PricingTiersTable {
+  id: Generated<string>;
+  pricing_version: string;
+  tier_id: string;
+  config_json: unknown;
+  created_at: Generated<Timestamp>;
+}
+
+export interface InvoicesTable {
+  id: Generated<string>;
+  invoice_number: string;
+  org_id: string;
+  cohort_id: string | null;
+  kind: string; // monthly_base | cohort_cycle_base | cohort_completion | report_overage
+  tier_id: string;
+  pricing_version: string;
+  billing_period_start: Timestamp;
+  billing_period_end: Timestamp;
+  base_fee_ngn: Generated<string>;
+  assessment_fee_ngn: Generated<string>;
+  report_fee_ngn: Generated<string>;
+  learners_billed_count: Generated<number>;
+  reports_billed_count: Generated<number>;
+  total_ngn: string;
+  line_items: Generated<unknown>;
+  status: Generated<string>; // pending | paid | overdue | void
+  due_date: Timestamp;
+  paid_at: Timestamp | null;
+  notes: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
+export interface ReportQuotaUsageTable {
+  id: Generated<string>;
+  org_id: string;
+  period_start: Timestamp;
+  period_end: Timestamp;
+  reports_used: Generated<number>;
+}
+
 export interface Database {
   organisations: OrganisationsTable;
   people: PeopleTable;
@@ -358,6 +412,9 @@ export interface Database {
   payments: PaymentsTable;
   payment_stub_state: PaymentStubStateTable;
   learner_reminders: LearnerRemindersTable;
+  pricing_tiers: PricingTiersTable;
+  invoices: InvoicesTable;
+  report_quota_usage: ReportQuotaUsageTable;
   cohort_share_links: CohortShareLinksTable;
   tracer_responses: TracerResponsesTable;
   impersonation_sessions: ImpersonationSessionsTable;

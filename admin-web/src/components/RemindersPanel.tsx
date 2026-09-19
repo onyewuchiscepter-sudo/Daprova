@@ -31,9 +31,20 @@ function ago(iso: string) {
 
 // Nudging learners who haven't finished a step. Each message carries the
 // learner's personal link, which also works on a different phone.
-export default function RemindersPanel({ cohortId, initialKind = 'post', onClose }: { cohortId: string; initialKind?: Kind; onClose: () => void }) {
+export default function RemindersPanel({
+  cohortId,
+  initialKind = 'post',
+  tracerEnabled = true,
+  onClose,
+}: {
+  cohortId: string;
+  initialKind?: Kind;
+  // The follow-up survey is a Growth+ feature.
+  tracerEnabled?: boolean;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
-  const [kind, setKind] = useState<Kind>(initialKind);
+  const [kind, setKind] = useState<Kind>(initialKind === 'tracer' && !tracerEnabled ? 'post' : initialKind);
   const [result, setResult] = useState<{ channel: string; summary: SendSummary } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -76,7 +87,7 @@ export default function RemindersPanel({ cohortId, initialKind = 'post', onClose
         </div>
 
         <div className="px-5 pt-4 flex flex-wrap gap-2">
-          {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
+          {(Object.keys(KIND_LABEL) as Kind[]).filter((k) => k !== 'tracer' || tracerEnabled).map((k) => (
             <button
               key={k}
               onClick={() => {

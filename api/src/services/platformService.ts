@@ -3,12 +3,12 @@ import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
-import { getTier } from './pricingService.js';
+import { billingSummary, listInvoices, markInvoicePaid, runBillingCycle } from './billing/index.js';
 
 export async function listOrgs() {
   return db
     .selectFrom('organisations')
-    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'verification_status', 'created_at', 'deleted_at'])
+    .select(['id', 'name', 'slug', 'contact_email', 'billing_status', 'verification_status', 'pricing_tier', 'billing_frequency', 'is_enterprise_custom', 'created_at', 'deleted_at'])
     .orderBy('created_at', 'desc')
     .execute();
 }
@@ -32,13 +32,14 @@ export async function getOrgDetail(orgId: string) {
   const cohorts = await db
     .selectFrom('cohorts')
     .innerJoin('courses', 'courses.id', 'cohorts.course_id')
-    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.student_count', 'cohorts.plan_tier_at_creation', 'cohorts.is_free_trial'])
+    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.student_count', 'cohorts.is_free_trial', 'cohorts.finalized_at'])
     .where('courses.org_id', '=', orgId)
     .where('cohorts.deleted_at', 'is', null)
     .orderBy('cohorts.created_at', 'desc')
     .execute();
 
-  return { ...org, members, cohorts };
+  const [billing, invoices] = await Promise.all([billingSummary(orgId), listInvoices(orgId)]);
+  return { ...org, members, cohorts, billing: { ...billing, tiers: undefined }, invoices };
 }
 
 // Model B (docs/org-onboarding-spec.md §1): a Daprova team member creates
@@ -249,46 +250,68 @@ export async function reactivateOrg(actorPersonId: string, orgId: string) {
   return updated;
 }
 
-// "Override an org's plan tier" (§7.2) is implemented as overriding a
-// specific cohort's tier — pricing is per-cohort (§5.7, Sprint 4), so an
-// org-wide field wouldn't actually change what checkCapacity/hasFeature
-// enforce. Bypasses the normal upgrade-path/payment flow entirely, as the
-// spec describes ("manual correction or comping a customer").
-export async function overrideCohortTier(actorPersonId: string, orgId: string, cohortId: string, newTierId: string) {
-  const cohort = await db
-    .selectFrom('cohorts')
-    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
-    .selectAll('cohorts')
-    .where('cohorts.id', '=', cohortId)
-    .where('courses.org_id', '=', orgId)
-    .executeTakeFirst();
-  if (!cohort) throw notFound('Cohort not found in this organisation');
+// Pricing spec §3/§6 — platform control of an org's plan: set its tier
+// (e.g. an agreed early upgrade), billing frequency, projected volume, or an
+// Enterprise deal (is_enterprise_custom + custom_pricing_json overrides).
+// Nothing already invoiced changes.
+export async function setOrgPricing(
+  actorPersonId: string,
+  orgId: string,
+  opts: {
+    pricing_tier?: 'starter' | 'growth' | 'scale' | 'enterprise';
+    billing_frequency?: 'monthly' | 'per_cohort_cycle';
+    projected_students_per_year?: number | null;
+    is_enterprise_custom?: boolean;
+    custom_pricing_json?: Record<string, unknown> | null;
+  },
+) {
+  const org = await assertOrgExists(orgId);
+  const patch: Record<string, unknown> = {};
+  if (opts.pricing_tier && opts.pricing_tier !== org.pricing_tier) {
+    patch.pricing_tier = opts.pricing_tier;
+    patch.tier_effective_date = sql`now()`;
+    patch.pending_tier = null;
+  }
+  if (opts.billing_frequency) patch.billing_frequency = opts.billing_frequency;
+  if (opts.projected_students_per_year !== undefined) patch.projected_students_per_year = opts.projected_students_per_year;
+  if (opts.is_enterprise_custom !== undefined) patch.is_enterprise_custom = opts.is_enterprise_custom;
+  if (opts.custom_pricing_json !== undefined) patch.custom_pricing_json = opts.custom_pricing_json === null ? null : JSON.stringify(opts.custom_pricing_json);
+  // A negotiated Enterprise deal lifts the "contact sales" hold.
+  if (opts.is_enterprise_custom && org.billing_status === 'pending_manual_quote') patch.billing_status = 'active';
+  if (!Object.keys(patch).length) return org;
 
-  const tier = await getTier(newTierId);
-
-  const updated = await db
-    .updateTable('cohorts')
-    .set({ plan_tier_at_creation: tier.tier_id, status: cohort.status === 'locked_pending_upgrade' ? 'active' : cohort.status })
-    .where('id', '=', cohortId)
-    .returningAll()
-    .executeTakeFirstOrThrow();
-  await db
-    .insertInto('cohort_tier_history')
-    .values({ cohort_id: cohortId, old_tier: cohort.plan_tier_at_creation, new_tier: tier.tier_id, payment_id: null })
-    .execute();
-
+  const updated = await db.updateTable('organisations').set(patch).where('id', '=', orgId).returningAll().executeTakeFirstOrThrow();
   await writeAuditLog({
     actorPersonId,
     actorContext: 'platform_admin',
     orgId,
-    action: 'tier_overridden',
-    details: { cohort_id: cohortId, old_tier: cohort.plan_tier_at_creation, new_tier: tier.tier_id },
+    action: 'pricing_updated',
+    details: { before: { pricing_tier: org.pricing_tier, billing_frequency: org.billing_frequency, is_enterprise_custom: org.is_enterprise_custom }, changes: opts },
   });
-
   return updated;
 }
 
-const VALID_BILLING_STATUSES = ['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended'] as const;
+// Offline payment (bank transfer) or a goodwill write-off of an invoice.
+export async function settleInvoice(actorPersonId: string, invoiceId: string, action: 'mark_paid' | 'void', note?: string) {
+  const invoice = await db.selectFrom('invoices').selectAll().where('id', '=', invoiceId).where('deleted_at', 'is', null).executeTakeFirst();
+  if (!invoice) throw notFound('Invoice not found');
+  let updated;
+  if (action === 'mark_paid') {
+    updated = await markInvoicePaid(invoiceId, note ?? 'Marked paid by Daprova');
+    if (!updated) throw badRequest(`Invoice is ${invoice.status}, not awaiting payment`);
+  } else {
+    if (invoice.status === 'paid') throw badRequest('A paid invoice cannot be voided');
+    updated = await db.updateTable('invoices').set({ status: 'void', notes: note ?? 'Voided by Daprova' }).where('id', '=', invoiceId).returningAll().executeTakeFirstOrThrow();
+  }
+  await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId: invoice.org_id, action: action === 'void' ? 'invoice_voided' : 'invoice_marked_paid', details: { invoice_id: invoiceId, invoice_number: invoice.invoice_number, note } });
+  return updated;
+}
+
+export async function runBillingNow() {
+  return runBillingCycle();
+}
+
+const VALID_BILLING_STATUSES = ['active', 'pending_manual_quote', 'suspended'] as const;
 
 // "Manually correct billing status" (§7.2) — e.g. confirming an offline
 // bank-transfer payment for an Enterprise deal by moving it out of
@@ -317,16 +340,13 @@ export async function correctBillingStatus(actorPersonId: string, orgId: string,
   return updated;
 }
 
-// "Extend or grant a free-trial exception" (§7.2) — goodwill override of
-// §5.4's one-time rule. Resets the flag rather than directly assigning
-// FREE_TRIAL to a cohort, so the existing assignTierForNewCohort logic
-// naturally grants it again the next time this org creates a cohort —
-// no special-casing needed anywhere else.
+// "Extend or grant a free-trial exception" (§7.2) — goodwill: the org's
+// next cohort is free (assessment fees waived for up to 50 learners).
 export async function extendFreeTrial(actorPersonId: string, orgId: string) {
   await assertOrgExists(orgId);
   const updated = await db
     .updateTable('organisations')
-    .set({ has_used_free_trial: false })
+    .set((eb) => ({ free_cohorts_remaining: eb('free_cohorts_remaining', '+', 1) }))
     .where('id', '=', orgId)
     .returningAll()
     .executeTakeFirstOrThrow();

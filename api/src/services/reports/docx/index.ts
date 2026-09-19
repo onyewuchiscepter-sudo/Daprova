@@ -31,7 +31,7 @@ function brandHeader(branding: Branding): Header {
 }
 
 function brandFooter(branding: Branding): Footer {
-  const left = branding.custom ? `${branding.orgName} · Measured with Daprova` : 'Generated with Daprova';
+  const left = branding.whiteLabel ? branding.orgName : branding.custom ? `${branding.orgName} · Measured with Daprova` : 'Generated with Daprova';
   return new Footer({
     children: [
       new Paragraph({

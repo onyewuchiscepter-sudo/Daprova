@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { apiFetch, apiFetchBlob, resolveApiUrl } from '../api';
-import ReportsPanel, { type CohortPlan } from '../components/ReportsPanel';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { apiFetch, apiFetchBlob } from '../api';
+import ReportsPanel from '../components/ReportsPanel';
+import UpgradePrompt from '../components/UpgradePrompt';
+import { useAuth } from '../auth';
 import RemindersPanel from '../components/RemindersPanel';
 import SharePanel from '../components/SharePanel';
 import OutcomesPanel from '../components/OutcomesPanel';
@@ -18,9 +20,24 @@ type Cohort = {
   total_enrolled: number;
   pre_completed: number;
   post_completed: number;
-  capacity_status: 'allow' | 'warn' | 'block';
-  max_students: number | null;
-  plan: CohortPlan;
+  is_free_trial: boolean;
+  finalized_at: string | null;
+  end_date: string | null;
+  plan: {
+    tier_id: string;
+    name: string;
+    assessment_fee_per_learner_ngn: number;
+    features: { analytics_scores: string; equity_dashboard: boolean; tracer_survey: boolean; live_funder_monitoring_link: false | string };
+  };
+};
+type FinalizePreview = {
+  finalized: boolean;
+  learners_completed: number;
+  learners_waived: number;
+  learners_billed: number;
+  fee_per_learner_ngn: number;
+  total_ngn: number;
+  tier: string;
 };
 type LearnerRow = {
   learner_id: string;
@@ -46,6 +63,7 @@ type DashboardAnalytics = {
   pass_rate: number | null;
   competency_breakdown: Array<{ area_id: string; area_name: string; pre_pct: number | null; post_pct: number | null }>;
   self_ratings: Array<{ area_id: string; area_name: string; pre_avg: number | null; post_avg: number | null; n: number }>;
+  analytics_level?: string;
 };
 type EquityGroup = {
   label: string;
@@ -170,7 +188,7 @@ export default function CohortDashboardPage() {
     queryKey: ['cohort-equity', id],
     queryFn: () => apiFetch(`/api/v1/cohorts/${id}/equity`),
     refetchInterval: 5000,
-    enabled: tab === 'equity',
+    enabled: tab === 'equity' && cohort?.plan.features.equity_dashboard === true,
   });
 
   // Module 5 (S11): learner satisfaction survey aggregate — no polling since
@@ -187,43 +205,25 @@ export default function CohortDashboardPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohort', id] }),
   });
 
-  // docs/org-onboarding-spec.md §5.6 — sends the admin to the provider's
-  // hosted checkout (Paystack/Flutterwave, or the test stub). The provider
-  // redirects back here with ?payment=<reference>, handled below.
-  // "capacity" upgrades lock the cohort until paid; "feature" upgrades
-  // (e.g. to unlock reports) don't.
-  const upgradeMutation = useMutation({
-    mutationFn: (purpose: 'capacity' | 'feature') => apiFetch(`/api/v1/cohorts/${id}/upgrade`, { method: 'POST', body: JSON.stringify({ purpose }) }),
-    onSuccess: (result) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  // Pricing spec: finalising closes the cohort and invoices the assessment
+  // fee for every learner who completed both pre and post.
+  const [confirmFinalize, setConfirmFinalize] = useState(false);
+  const { data: finalizePreview } = useQuery<FinalizePreview>({
+    queryKey: ['cohort-finalize', id],
+    queryFn: () => apiFetch(`/api/v1/cohorts/${id}/finalize`),
+    enabled: confirmFinalize,
+  });
+  const finalizeMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/cohorts/${id}/finalize`, { method: 'POST' }),
+    onSuccess: () => {
+      setConfirmFinalize(false);
       queryClient.invalidateQueries({ queryKey: ['cohort', id] });
-      // Same tab, like any hosted checkout: the gateway (or the test stub)
-      // sends the admin back here with ?payment=<reference>.
-      window.location.assign(resolveApiUrl(result.checkoutUrl));
+      queryClient.invalidateQueries({ queryKey: ['billing'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
   });
-
-  // Back from the payment provider: ask the API to check the payment with
-  // the provider right away, so the new plan shows without waiting for the
-  // reconciliation job.
-  const [paymentNotice, setPaymentNotice] = useState<{ tone: 'gain' | 'amber' | 'flag'; text: string } | null>(null);
-  const paymentRef = searchParams.get('payment') ?? searchParams.get('reference') ?? searchParams.get('tx_ref');
-  useEffect(() => {
-    if (!paymentRef) return;
-    const next = new URLSearchParams(searchParams);
-    for (const k of ['payment', 'reference', 'trxref', 'tx_ref', 'transaction_id', 'status']) next.delete(k);
-    setSearchParams(next, { replace: true });
-    setPaymentNotice({ tone: 'amber', text: 'Checking your payment…' });
-    apiFetch(`/api/v1/payments/${encodeURIComponent(paymentRef)}/verify`, { method: 'POST' })
-      .then((p: { status: string; target_tier: string; failure_reason: string | null }) => {
-        queryClient.invalidateQueries({ queryKey: ['cohort', id] });
-        if (p.status === 'confirmed') setPaymentNotice({ tone: 'gain', text: `Payment received — this cohort is now on the ${p.target_tier.replace('_', ' ').toLowerCase()} plan.` });
-        else if (p.status === 'pending') setPaymentNotice({ tone: 'amber', text: 'Payment is still processing. This page updates automatically once it clears (usually within a minute).' });
-        else setPaymentNotice({ tone: 'flag', text: `Payment didn't go through${p.failure_reason ? ` (${p.failure_reason})` : ''}. You can try again.` });
-      })
-      .catch((err: Error) => setPaymentNotice({ tone: 'flag', text: err.message }));
-    // Runs once per returned reference.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentRef]);
 
   function copyLink(token: string, basePath: 'assess' | 'satisfaction' | 'tracer' = 'assess') {
     navigator.clipboard.writeText(`${ASSESSMENT_WEB_ORIGIN}/${basePath}/${token}`);
@@ -256,6 +256,8 @@ export default function CohortDashboardPage() {
   const postPct = cohort.total_enrolled > 0 ? Math.round((cohort.post_completed / cohort.total_enrolled) * 100) : 0;
   const missing = cohort.total_enrolled - cohort.post_completed;
 
+  const features = cohort.plan.features;
+  const basicAnalytics = features.analytics_scores === 'basic';
   const filteredLearners = learners?.filter((l) => FILTER_DIMENSIONS.every((d) => !filters[d] || l[d] === filters[d]));
 
   return (
@@ -277,47 +279,53 @@ export default function CohortDashboardPage() {
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-sage">{cohort.plan.name} plan</span>
       </p>
 
-      {paymentNotice && (
-        <div
-          className={`mb-6 rounded-md px-4 py-3 text-sm border ${
-            paymentNotice.tone === 'gain' ? 'bg-gain-wash text-gain-deep border-gain/20' : paymentNotice.tone === 'amber' ? 'bg-amber-wash text-ink border-amber/20' : 'bg-flag-wash text-flag border-flag/20'
-          }`}
-        >
-          {paymentNotice.text}
-        </div>
-      )}
-
-      {cohort.status === 'locked_pending_upgrade' ? (
-        <div className="mb-6 rounded-md px-4 py-3 text-sm bg-flag-wash text-flag border border-flag/20">
-          This cohort is locked pending an upgrade payment. Existing data stays visible, but no new students or attempts can be recorded until the
-          payment clears.
+      {cohort.finalized_at ? (
+        <div className="mb-6 rounded-md px-4 py-3 text-sm bg-ground text-ink-soft border border-rule">
+          This cohort was finalised on {new Date(cohort.finalized_at).toLocaleDateString()}. Its results, reports and certificates stay available; new
+          assessments are closed.
         </div>
       ) : (
-        cohort.capacity_status !== 'allow' && (
-          <div
-            className={`mb-6 rounded-md px-4 py-3 text-sm flex items-center justify-between gap-4 ${
-              cohort.capacity_status === 'block' ? 'bg-flag-wash text-flag border border-flag/20' : 'bg-amber-wash text-amber border border-amber/20'
-            }`}
-          >
-            <span>
-              {cohort.capacity_status === 'block'
-                ? `This cohort has reached its plan's limit of ${cohort.max_students} students — upgrade to enrol more.`
-                : `This cohort is approaching its plan's limit (${cohort.total_enrolled}/${cohort.max_students} students) — consider upgrading soon.`}
-            </span>
-            {cohort.capacity_status === 'block' && (
-              <button
-                onClick={() => upgradeMutation.mutate('capacity')}
-                disabled={upgradeMutation.isPending}
-                className="shrink-0 bg-gain text-white text-xs rounded px-3 py-1.5 disabled:opacity-50"
-              >
-                {upgradeMutation.isPending ? 'Opening checkout…' : 'Upgrade now'}
-              </button>
+        isAdmin && (
+          <div className="mb-6 rounded-md px-4 py-3 text-sm bg-paper border border-rule">
+            {!confirmFinalize ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-ink-soft">
+                  {cohort.is_free_trial ? 'Free trial cohort. ' : ''}When the programme is over, finalise the cohort to close assessments and issue its invoice
+                  {cohort.end_date ? ` (it finalises automatically 14 days after ${new Date(cohort.end_date).toLocaleDateString()})` : ''}.
+                </span>
+                <button onClick={() => setConfirmFinalize(true)} className="shrink-0 text-sm border border-rule rounded px-3 py-1.5 hover:border-ink">
+                  Finalise cohort…
+                </button>
+              </div>
+            ) : !finalizePreview ? (
+              <p className="text-ink-soft">Working out the total…</p>
+            ) : (
+              <div>
+                <p className="text-ink">
+                  <strong>{finalizePreview.learners_completed}</strong> learner{finalizePreview.learners_completed === 1 ? '' : 's'} completed both assessments.
+                  {finalizePreview.learners_waived > 0 && ` ${finalizePreview.learners_waived} are free under your trial.`}{' '}
+                  {finalizePreview.learners_billed > 0
+                    ? `${finalizePreview.learners_billed} × ₦${finalizePreview.fee_per_learner_ngn.toLocaleString()} = ₦${finalizePreview.total_ngn.toLocaleString()} will be invoiced (${finalizePreview.tier} plan).`
+                    : 'Nothing will be charged.'}
+                </p>
+                <p className="text-xs text-sage mt-1">Learners who haven't taken the post-assessment yet won't be able to after this. This can't be undone.</p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => finalizeMutation.mutate()}
+                    disabled={finalizeMutation.isPending}
+                    className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {finalizeMutation.isPending ? 'Finalising…' : 'Finalise now'}
+                  </button>
+                  <button onClick={() => setConfirmFinalize(false)} className="text-sm border rounded px-3 py-1.5">
+                    Cancel
+                  </button>
+                </div>
+                {finalizeMutation.isError && <p className="text-xs text-flag mt-2">{(finalizeMutation.error as Error).message}</p>}
+              </div>
             )}
           </div>
         )
-      )}
-      {upgradeMutation.isError && (
-        <p className="text-sm text-flag mb-4">{upgradeMutation.error instanceof Error ? upgradeMutation.error.message : 'Could not start upgrade'}</p>
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -330,13 +338,15 @@ export default function CohortDashboardPage() {
           onCopy={(t) => copyLink(t, 'satisfaction')}
           onRegenerate={() => regenerateMutation.mutate('satisfaction')}
         />
-        <LinkCard
-          label="Follow-up survey link (3–6 months on)"
-          token={cohort.tracer_link_token}
-          basePath="tracer"
-          onCopy={(t) => copyLink(t, 'tracer')}
-          onRegenerate={() => regenerateMutation.mutate('tracer')}
-        />
+        {features.tracer_survey && (
+          <LinkCard
+            label="Follow-up survey link (3–6 months on)"
+            token={cohort.tracer_link_token}
+            basePath="tracer"
+            onCopy={(t) => copyLink(t, 'tracer')}
+            onRegenerate={() => regenerateMutation.mutate('tracer')}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -364,7 +374,7 @@ export default function CohortDashboardPage() {
       {/* US-13: compound demographic filters — applying any of them updates
           the Overview tab's stats, competency breakdown, and learner table
           together via the same query. Not applicable to the Reports tab. */}
-      {tab !== 'reports' && tab !== 'satisfaction' && tab !== 'outcomes' && (
+      {tab !== 'reports' && tab !== 'satisfaction' && tab !== 'outcomes' && !basicAnalytics && (tab !== 'equity' || features.equity_dashboard) && (
         <div className="bg-paper rounded-lg border border-rule p-4 mb-6 flex flex-wrap items-end gap-3">
           {FILTER_DIMENSIONS.map((dim) => (
             <label key={dim} className="text-xs text-ink-soft">
@@ -497,7 +507,20 @@ export default function CohortDashboardPage() {
         </>
       )}
 
-      {tab === 'equity' && (
+      {tab === 'overview' && basicAnalytics && (
+        <p className="text-xs text-sage mb-4">
+          Your plan includes basic analytics. Filtering by gender, age, location and disability, effect sizes and self-rated confidence come with Growth and
+          above — <Link to="/billing" className="underline">see plans</Link>.
+        </p>
+      )}
+
+      {tab === 'equity' && !features.equity_dashboard && (
+        <UpgradePrompt title="Equity dashboard" requiredTier="growth">
+          See how results differ by gender, age group, location and disability — the breakdown funders increasingly ask for.
+        </UpgradePrompt>
+      )}
+
+      {tab === 'equity' && features.equity_dashboard && (
         <div className="space-y-6">
           {equity?.map((breakdown) => (
             <div key={breakdown.dimension} className="bg-paper rounded-lg border border-rule overflow-hidden">
@@ -615,14 +638,30 @@ export default function CohortDashboardPage() {
         </div>
       )}
 
-      {tab === 'outcomes' && <OutcomesPanel cohortId={cohort.id} onRemind={() => setRemindKind('tracer')} />}
+      {tab === 'outcomes' &&
+        (features.tracer_survey ? (
+          <OutcomesPanel cohortId={cohort.id} onRemind={() => setRemindKind('tracer')} />
+        ) : (
+          <UpgradePrompt title="Follow-up (tracer) survey" requiredTier="growth">
+            Check in with learners 3–6 months after the programme — jobs, income, further study — and add those outcomes to funder reports.
+          </UpgradePrompt>
+        ))}
 
-      {remindKind && <RemindersPanel cohortId={cohort.id} initialKind={remindKind} onClose={() => setRemindKind(null)} />}
-      {sharing && <SharePanel cohortId={cohort.id} onClose={() => setSharing(false)} />}
+      {remindKind && <RemindersPanel cohortId={cohort.id} initialKind={remindKind} tracerEnabled={features.tracer_survey} onClose={() => setRemindKind(null)} />}
+      {sharing &&
+        (features.live_funder_monitoring_link ? (
+          <SharePanel cohortId={cohort.id} onClose={() => setSharing(false)} />
+        ) : (
+          <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40" onClick={() => setSharing(false)}>
+            <div className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <UpgradePrompt title="Live funder link" requiredTier="growth">
+                Give a funder a read-only link to this cohort's live results instead of sending files back and forth.
+              </UpgradePrompt>
+            </div>
+          </div>
+        ))}
 
-      {tab === 'reports' && (
-        <ReportsPanel cohortId={cohort.id} plan={cohort.plan} onUpgrade={() => upgradeMutation.mutate('feature')} upgrading={upgradeMutation.isPending} />
-      )}
+      {tab === 'reports' && <ReportsPanel cohortId={cohort.id} />}
     </div>
   );
 }

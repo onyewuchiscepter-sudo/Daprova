@@ -2,6 +2,7 @@ import { env } from './env.js';
 import { app } from './app.js';
 import { runMigrationsToLatest } from './db/migrate.js';
 import { reconcilePendingPayments } from './services/paymentService.js';
+import { runBillingCycle } from './services/billing/index.js';
 
 // Applying pending migrations on boot means schema changes ship with the
 // deploy itself instead of needing a separate manual step against whatever's
@@ -20,6 +21,11 @@ runMigrationsToLatest()
     setInterval(() => {
       reconcilePendingPayments().catch((err) => console.error('[payment-reconciliation] failed', err));
     }, 60_000);
+    // Pricing & billing: overdue invoices, monthly invoices + tier
+    // re-evaluation, auto-finalising cohorts.
+    setInterval(() => {
+      runBillingCycle().catch((err) => console.error('[billing] failed', err));
+    }, 60 * 60_000);
   })
   .catch((err) => {
     console.error('[daprova-api] migration failed, refusing to start', err);

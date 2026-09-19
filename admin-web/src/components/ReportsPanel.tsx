@@ -1,12 +1,13 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, apiFetchBlob, apiPostBlob } from '../api';
+import { ApiError, apiFetch, apiFetchBlob, apiPostBlob } from '../api';
 import { PdfPreview } from './PdfPreview';
 
 type ReportTemplate = { key: string; label: string };
 type NarrativeFields = { background: string; challenges: string; next_steps: string };
 type ReportRecord = { id: string; funder_template: string; narrative_json: NarrativeFields; status: string; generated_at: string };
-export type CohortPlan = { tier_id: string | null; name: string; features: string[]; next_tier: { tier_id: string; name: string; price: number | null } | null };
+type Quota = { included: number | null; used: number; remaining: number | null; next_report_fee_ngn: number | null; period_end: string };
 
 const EMPTY: NarrativeFields = { background: '', challenges: '', next_steps: '' };
 
@@ -14,22 +15,19 @@ function naira(amount: number) {
   return `₦${amount.toLocaleString()}`;
 }
 
-// Module 4: funder reports. Preview works on every plan (watermarked when
-// the cohort's plan doesn't include downloadable reports), so an org can
-// see exactly what it's upgrading for.
-export default function ReportsPanel({
-  cohortId,
-  plan,
-  onUpgrade,
-  upgrading,
-}: {
-  cohortId: string;
-  plan: CohortPlan;
-  onUpgrade: () => void;
-  upgrading: boolean;
-}) {
+// Module 4: funder reports. Every plan can generate reports; each plan
+// includes a number per year, and past that each extra report is billed
+// (the admin confirms the fee first — the API answers 402 REPORT_OVERAGE).
+// Previews are always free and watermarked.
+export default function ReportsPanel({ cohortId }: { cohortId: string }) {
   const queryClient = useQueryClient();
-  const canExport = plan.features.includes('exportable_reports');
+  const { data: billing } = useQuery<{ quota: Quota; blocked: { invoice_number: string } | null }>({
+    queryKey: ['billing'],
+    queryFn: () => apiFetch('/api/v1/billing'),
+    retry: false,
+  });
+  const quota = billing?.quota;
+  const [overage, setOverage] = useState<{ fee: number; message: string } | null>(null);
 
   const { data: templates } = useQuery<ReportTemplate[]>({
     queryKey: ['report-templates'],
@@ -51,9 +49,19 @@ export default function ReportsPanel({
   const templateLabel = (key: string) => templates?.find((t) => t.key === key)?.label ?? key;
 
   const generate = useMutation({
-    mutationFn: () => apiFetch(`/api/v1/cohorts/${cohortId}/reports`, { method: 'POST', body: JSON.stringify({ template, narrative: form }) }),
+    mutationFn: (confirmOverage: boolean) =>
+      apiFetch(`/api/v1/cohorts/${cohortId}/reports`, { method: 'POST', body: JSON.stringify({ template, narrative: form, confirm_overage: confirmOverage }) }),
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === 'REPORT_OVERAGE') {
+        const fee = Number((err.details as { fee_ngn?: number } | undefined)?.fee_ngn ?? quota?.next_report_fee_ngn ?? 0);
+        setOverage({ fee, message: err.message });
+      }
+    },
     onSuccess: () => {
+      setOverage(null);
       queryClient.invalidateQueries({ queryKey: ['cohort-reports', cohortId] });
+      queryClient.invalidateQueries({ queryKey: ['billing'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setForm(EMPTY);
       setTemplate('');
       closePreview();
@@ -106,28 +114,31 @@ export default function ReportsPanel({
     URL.revokeObjectURL(url);
   }
 
-  const upgradeLabel = plan.next_tier
-    ? `Upgrade to ${plan.next_tier.name}${plan.next_tier.price !== null ? ` · ${naira(plan.next_tier.price)}` : ''}`
-    : 'Contact sales to upgrade';
-
-  const upgradeButton = plan.next_tier?.price != null && (
-    <button onClick={onUpgrade} disabled={upgrading} className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50 shrink-0">
-      {upgrading ? 'Opening checkout…' : upgradeLabel}
-    </button>
-  );
-
   const selectedKey = editingId ? reports?.find((r) => r.id === editingId)?.funder_template : template;
 
   return (
     <div className="space-y-6">
-      {!canExport && (
-        <div className="rounded-lg border border-amber/30 bg-amber-wash px-4 py-3 text-sm text-ink flex items-center justify-between gap-4">
-          <span>
-            This cohort is on the <strong>{plan.name}</strong> plan. You can write and <strong>preview</strong> any funder report, but generating and
-            downloading reports needs the Growth plan or above.
-          </span>
-          {upgradeButton}
+      {billing?.blocked ? (
+        <div className="rounded-lg border border-flag/20 bg-flag-wash px-4 py-3 text-sm text-flag">
+          New reports are paused until overdue invoice {billing.blocked.invoice_number} is paid.{' '}
+          <Link to="/billing" className="underline">
+            Go to billing
+          </Link>
         </div>
+      ) : (
+        quota && (
+          <div className="rounded-lg border border-rule bg-paper px-4 py-3 text-sm text-ink-soft flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Funder reports this year:{' '}
+              <strong className="text-ink font-mono">
+                {quota.used} / {quota.included ?? '∞'}
+              </strong>
+              {quota.included !== null &&
+                (quota.remaining ? ` — ${quota.remaining} more included.` : ` — each extra report is ${naira(quota.next_report_fee_ngn ?? 0)}.`)}
+            </span>
+            <span className="text-xs text-sage">Previews and re-generating an existing report are free.</span>
+          </div>
+        )
       )}
 
       <div className="bg-paper rounded-lg border border-rule p-5">
@@ -171,7 +182,7 @@ export default function ReportsPanel({
               <>
                 <button
                   onClick={() => regenerate.mutate(editingId)}
-                  disabled={regenerate.isPending || !canExport}
+                  disabled={regenerate.isPending}
                   className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
                 >
                   {regenerate.isPending ? 'Regenerating…' : 'Save & regenerate'}
@@ -188,9 +199,8 @@ export default function ReportsPanel({
               </>
             ) : (
               <button
-                onClick={() => generate.mutate()}
-                disabled={!template || generate.isPending || !canExport}
-                title={canExport ? undefined : 'Needs the Growth plan or above'}
+                onClick={() => generate.mutate(false)}
+                disabled={!template || generate.isPending}
                 className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50"
               >
                 {generate.isPending ? 'Generating…' : 'Generate report'}
@@ -198,7 +208,21 @@ export default function ReportsPanel({
             )}
           </div>
           {previewError && <p className="text-xs text-flag">{previewError}</p>}
-          {generate.isError && <p className="text-xs text-flag">{(generate.error as Error).message}</p>}
+          {overage && (
+            <div className="rounded-md border border-amber/30 bg-amber-wash px-3 py-2 text-sm text-ink">
+              <p>{overage.message}</p>
+              <p className="text-xs text-ink-soft mt-1">It will be added to an invoice you can pay from Billing.</p>
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => generate.mutate(true)} disabled={generate.isPending} className="text-sm bg-gain text-white rounded px-3 py-1.5 disabled:opacity-50">
+                  {generate.isPending ? 'Generating…' : `Generate for ${naira(overage.fee)}`}
+                </button>
+                <button onClick={() => setOverage(null)} className="text-sm border rounded px-3 py-1.5">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {generate.isError && !overage && <p className="text-xs text-flag">{(generate.error as Error).message}</p>}
           {regenerate.isError && <p className="text-xs text-flag">{(regenerate.error as Error).message}</p>}
         </div>
       </div>
@@ -261,12 +285,7 @@ export default function ReportsPanel({
           title={preview.title}
           onClose={closePreview}
           footer={
-            preview.watermarked ? (
-              <div className="flex items-center justify-between gap-4 text-sm">
-                <span className="text-ink-soft">Watermarked preview — upgrade this cohort to generate and download the clean report.</span>
-                {upgradeButton}
-              </div>
-            ) : undefined
+            preview.watermarked ? <p className="text-sm text-ink-soft">Watermarked preview — generate the report to download the clean version.</p> : undefined
           }
         />
       )}

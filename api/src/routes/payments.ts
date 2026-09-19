@@ -34,9 +34,9 @@ paymentsRouter.post('/:reference/verify', requireAuth, requireRole('admin'), asy
 // checkout page. Only used while no real provider keys are configured.
 paymentsRouter.get('/stub-checkout/:reference', async (req, res, next) => {
   try {
-    const { payment, tier } = await paymentService.getStubCheckoutInfo(req.params.reference);
+    const { payment, label } = await paymentService.getStubCheckoutInfo(req.params.reference);
     // Same return trip a real gateway makes after checkout.
-    const returnUrl = `${env.adminDashboardOrigin}/cohorts/${payment.cohort_id}?payment=${payment.reference}`;
+    const returnUrl = `${env.adminDashboardOrigin}/billing?payment=${payment.reference}`;
     res.set('Content-Type', 'text/html').send(`
       <!doctype html><html><head><title>Test checkout</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -45,7 +45,7 @@ paymentsRouter.get('/stub-checkout/:reference', async (req, res, next) => {
       .pay{background:#0f766e;color:white;border:none}.fail{background:white;border:1px solid #cbd5e1}
       .note{color:#64748b;font-size:12px}</style>
       </head><body>
-        <h2>Upgrade to ${tier.name}</h2>
+        <h2>${label.replace(/[<>&"]/g, '')}</h2>
         <p>Amount due: &#8358;${Number(payment.amount).toLocaleString()}</p>
         <p class="note">Test checkout — no real payment gateway is connected yet, so no money moves.</p>
         <button class="pay" onclick="act('success')">Simulate successful payment</button>

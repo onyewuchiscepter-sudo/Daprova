@@ -18,6 +18,7 @@ import { signupRouter } from './routes/signup.js';
 import { paymentsRouter } from './routes/payments.js';
 import { impersonationRouter } from './routes/impersonation.js';
 import { publicRouter } from './routes/public.js';
+import { billingRouter } from './routes/billing.js';
 import { errorHandler } from './lib/errors.js';
 import { adminLimiter, publicLimiter } from './middleware/rateLimit.js';
 
@@ -71,5 +72,6 @@ app.use('/api/v1/orgs', publicLimiter, signupRouter);
 app.use('/api/v1/payments', publicLimiter, paymentsRouter);
 app.use('/api/v1/impersonation', adminLimiter, impersonationRouter);
 app.use('/api/v1/public', publicLimiter, publicRouter);
+app.use('/api/v1/billing', adminLimiter, billingRouter);
 
 app.use(errorHandler);

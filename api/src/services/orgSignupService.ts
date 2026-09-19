@@ -1,7 +1,7 @@
 import { db } from '../db/index.js';
 import { slugify } from '../lib/slug.js';
 import { findFraudMatches, recordFraudMatches } from './fraudService.js';
-import { ENTERPRISE_THRESHOLD } from './pricingService.js';
+import { ENTERPRISE_THRESHOLD, determineTier } from './billing/index.js';
 
 export type SignupInput = {
   org_name: string;
@@ -18,6 +18,8 @@ export type SignupInput = {
   reports_to_funder: boolean;
   reports_to_funder_name?: string;
   referral_source: string;
+  // Pricing spec §4 — chosen at signup.
+  billing_frequency?: 'monthly' | 'per_cohort_cycle';
 };
 
 async function uniqueSlug(base: string): Promise<string> {
@@ -32,9 +34,9 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 // docs/org-onboarding-spec.md §1 Model A, step 3-5. No cohort is created
-// here — expected_student_count is used only for Enterprise routing
-// (§5.5) and the fraud check; real per-cohort tier/free-trial assignment
-// already happens at first-cohort creation (Sprint 4's assignTierForNewCohort).
+// here. Pricing spec §3: a new org has no history, so its starting tier comes
+// from its projected yearly volume; 1,000+ routes to sales (Enterprise is
+// never self-serve). Its first cohort will be its free trial.
 //
 // verification_status starts 'pending' for every self-serve signup —
 // deliberately separate from billing_status/fraud flags. An org can create
@@ -64,6 +66,9 @@ export async function signUpOrg(authUid: string, adminEmail: string, input: Sign
       referral_source: input.referral_source,
       billing_status: billingStatus,
       verification_status: 'pending',
+      projected_students_per_year: input.expected_student_count,
+      pricing_tier: determineTier(input.expected_student_count),
+      billing_frequency: input.billing_frequency ?? 'monthly',
     })
     .returningAll()
     .executeTakeFirstOrThrow();

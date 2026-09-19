@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import { assignTierForNewCohort, checkCapacity, getCohortPlan } from './pricingService.js';
+import { assertCanCreateCohort, getOrgPlan, onCohortCreated } from './billing/index.js';
 import * as frameworkService from './frameworkService.js';
 
 // Three ways to create a course, matching the Framework -> Course hierarchy
@@ -50,9 +50,11 @@ export async function createCohort(
   },
 ) {
   await frameworkService.assertCourseOwnership(orgId, courseId);
+  // Pricing spec §3/§7: Enterprise sales gate, overdue invoices, and the
+  // plan's concurrent-cohort limit — checked before anything is created.
+  await assertCanCreateCohort(orgId);
 
-  // Ordinal per org (docs/org-onboarding-spec.md §4.4) — drives free-trial
-  // eligibility indirectly via has_used_free_trial, not read directly here.
+  // Ordinal per org (docs/org-onboarding-spec.md §4.4).
   const existingCount = await db
     .selectFrom('cohorts')
     .innerJoin('courses', 'courses.id', 'cohorts.course_id')
@@ -78,20 +80,10 @@ export async function createCohort(
     .returningAll()
     .executeTakeFirstOrThrow();
 
-  // Pricing assignment (Sprint 4) — the actual admin-facing cohort-creation
-  // form doesn't collect a student estimate yet (that's Sprint 5/6's
-  // signup-flow scope), so a rough default of 1 is used when the caller
-  // doesn't supply one; real enrollment still gets capped correctly via
-  // checkCapacity as students are actually added.
-  const { tier, isFreeTrial, cohortStatus } = await assignTierForNewCohort(orgId, cohort.id, opts.projected_student_count ?? 1);
-  const updated = await db
-    .updateTable('cohorts')
-    .set({ plan_tier_at_creation: tier.tier_id, is_free_trial: isFreeTrial, status: cohortStatus === 'pending_manual_quote' ? 'pending_manual_quote' : cohort.status })
-    .where('id', '=', cohort.id)
-    .returningAll()
-    .executeTakeFirstOrThrow();
-
-  return updated;
+  // The org's first cohort is its free trial; otherwise this may start
+  // billing and (per-cohort-cycle orgs) invoice the cycle's base fee.
+  const { free_trial } = await onCohortCreated(orgId, cohort.id);
+  return { ...cohort, is_free_trial: free_trial };
 }
 
 export async function listCohorts(orgId: string, courseId: string) {
@@ -152,11 +144,10 @@ export async function getCohort(orgId: string, cohortId: string) {
       .executeTakeFirstOrThrow(),
   ]);
 
-  // docs/org-onboarding-spec.md §5.4 — "warn at 90% of cap" needs an actual
-  // reader to be meaningful; the cohort detail view is the natural place
-  // since the admin dashboard already fetches it per cohort.
-  const capacity = await checkCapacity(cohortId);
-  const plan = await getCohortPlan(cohort.plan_tier_at_creation);
+  // The org's plan (pricing is per organisation): which cohort features are
+  // unlocked, so the page can show upgrade prompts instead of dead ends.
+  const { tier } = await getOrgPlan(orgId);
+  const plan = { tier_id: tier.tier_id, name: tier.display_name, features: tier.features, assessment_fee_per_learner_ngn: tier.assessment_fee_per_learner_ngn };
 
   return {
     ...cohort,
@@ -164,8 +155,6 @@ export async function getCohort(orgId: string, cohortId: string) {
     total_enrolled: Number(enrolled.count),
     pre_completed: Number(preCompleted.count),
     post_completed: Number(postCompleted.count),
-    capacity_status: capacity.status,
-    max_students: capacity.maxStudents,
   };
 }
 

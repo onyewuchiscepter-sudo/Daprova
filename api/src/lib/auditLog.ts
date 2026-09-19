@@ -1,6 +1,6 @@
 import { db } from '../db/index.js';
 
-export type AuditActorContext = 'org_admin' | 'platform_admin' | 'impersonating';
+export type AuditActorContext = 'org_admin' | 'platform_admin' | 'impersonating' | 'system';
 
 export async function writeAuditLog(opts: {
   actorPersonId: string | null;

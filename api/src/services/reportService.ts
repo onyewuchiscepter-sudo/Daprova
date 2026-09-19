@@ -5,7 +5,8 @@ import { buildReportDataContract, type NarrativeFields } from './reportDataServi
 import { renderReportPdf } from './reports/pdf/index.js';
 import { renderReportDocx } from './reports/docx/index.js';
 import type { FunderTemplateKey } from './reports/templateRegistry.js';
-import { assertFeature, hasFeature } from './pricingService.js';
+import { AppError } from '../lib/errors.js';
+import { assertNotBlocked, createInvoice, getOrgPlan, quotaStatus, recordReportUsage } from './billing/index.js';
 
 const REPORT_LIST_COLUMNS = ['id', 'cohort_id', 'funder_template', 'narrative_json', 'status', 'generated_at'] as const;
 
@@ -13,15 +14,48 @@ const REPORT_LIST_COLUMNS = ['id', 'cohort_id', 'funder_template', 'narrative_js
 // for a single cohort's report takes well under a second, so a queue would
 // add operational complexity (worker process, retry/poll UI) without a
 // user-visible benefit at this scale.
-export async function generateReport(orgId: string, cohortId: string, templateKey: FunderTemplateKey, narrative: NarrativeFields, generatedBy: string) {
-  // docs/org-onboarding-spec.md §5.3 — exportable/downloadable reports are
-  // gated from GROWTH upward; FREE_TRIAL/ENTRY don't include the feature.
-  // Scoped to this specific cohort's tier, not the org's — pricing is
-  // per-cohort (§5.7).
-  await assertFeature(orgId, cohortId, 'exportable_reports');
+// Pricing spec §1/§4 — every plan can generate funder reports; each plan
+// includes a number per year (rolling 12 months from signup), and each one
+// beyond that is invoiced at the plan's additional-report fee. The caller
+// must confirm an over-quota report (confirmOverage) before it's generated
+// and charged; regenerating an existing report never counts again.
+export async function generateReport(
+  orgId: string,
+  cohortId: string,
+  templateKey: FunderTemplateKey,
+  narrative: NarrativeFields,
+  generatedBy: string,
+  opts: { confirmOverage?: boolean } = {},
+) {
+  await assertNotBlocked(orgId, 'generate new reports');
+  const { org, tier } = await getOrgPlan(orgId);
+  const quota = await quotaStatus(org, tier);
+  const overageFee = quota.remaining === 0 ? tier.additional_report_fee_ngn : null;
+  if (overageFee !== null && !opts.confirmOverage) {
+    throw new AppError(402, 'REPORT_OVERAGE', `You've used the ${quota.included} funder report${quota.included === 1 ? '' : 's'} included in your plan this year. Another report is ₦${overageFee.toLocaleString()}.`, {
+      code: 'REPORT_OVERAGE',
+      fee_ngn: overageFee,
+      included: quota.included,
+      used: quota.used,
+    });
+  }
 
   const data = await buildReportDataContract(orgId, cohortId, narrative);
   const [pdf, docx] = await Promise.all([renderReportPdf(templateKey, data), renderReportDocx(templateKey, data)]);
+
+  await recordReportUsage(org);
+  if (overageFee) {
+    const now = new Date();
+    await createInvoice({
+      org,
+      tier,
+      kind: 'report_overage',
+      cohortId,
+      periodStart: now,
+      periodEnd: now,
+      lines: [{ category: 'report', description: `Additional funder report — ${data.cohort.name}`, quantity: 1, unit_ngn: overageFee, amount_ngn: overageFee }],
+    });
+  }
 
   return db
     .insertInto('cohort_reports')
@@ -37,14 +71,13 @@ export async function generateReport(orgId: string, cohortId: string, templateKe
     .executeTakeFirstOrThrow();
 }
 
-// PRD US-16 — see the report before generating/downloading it. Renders the
-// PDF only, stores nothing. Available on every tier so an org can see what
-// the Growth plan gets them: without exportable_reports it's watermarked.
+// PRD US-16 — see the report before generating it. Renders the PDF only,
+// stores nothing and doesn't count against the report allowance, so it's
+// watermarked "PREVIEW".
 export async function previewReport(orgId: string, cohortId: string, templateKey: FunderTemplateKey, narrative: NarrativeFields) {
   const data = await buildReportDataContract(orgId, cohortId, narrative);
-  const canExport = await hasFeature(orgId, cohortId, 'exportable_reports');
-  const pdf = await renderReportPdf(templateKey, data, canExport ? {} : { watermark: 'PREVIEW' });
-  return { pdf, watermarked: !canExport };
+  const pdf = await renderReportPdf(templateKey, data, { watermark: 'PREVIEW' });
+  return { pdf, watermarked: true };
 }
 
 async function assertCohortInOrg(orgId: string, cohortId: string) {

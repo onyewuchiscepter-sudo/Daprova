@@ -17,8 +17,9 @@
     }
   ],
 
-  // Payment reconciliation (index.ts runs this on a 60s setInterval on Node).
-  "triggers": { "crons": ["* * * * *"] },
+  // Every minute: payment reconciliation. Hourly (:07): the billing job.
+  // worker.ts tells them apart by controller.cron; index.ts uses setIntervals on Node.
+  "triggers": { "crons": ["* * * * *", "7 * * * *"] },
 
   // See src/worker/fsShim.ts — pdfkit's data files, served from the bundle.
   "alias": { "fs": "./src/worker/fsShim.ts" },

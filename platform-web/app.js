@@ -198,20 +198,22 @@ async function renderMain(status) {
     <div class="card">
       ${loadError ? `<p class="error">${esc(loadError)}</p>` : ''}
       <table>
-        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Billing status</th><th>Verification</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Slug</th><th>Contact</th><th>Plan</th><th>Billing</th><th>Verification</th><th>Created</th><th></th></tr></thead>
         <tbody>
           ${orgs
             .map(
               (o) => `
             <tr>
               <td>${esc(o.name)}${o.deleted_at ? ' <span class="muted">(closed)</span>' : ''}</td>
-              <td>${esc(o.slug)}</td><td>${esc(o.contact_email)}</td><td>${esc(o.billing_status ?? '')}</td>
+              <td>${esc(o.slug)}</td><td>${esc(o.contact_email)}</td>
+              <td>${esc(TIER_LABEL[o.pricing_tier] ?? o.pricing_tier ?? '')}${o.is_enterprise_custom ? ' (custom)' : ''}<br><span class="muted">${esc(o.billing_frequency === 'per_cohort_cycle' ? 'per cycle' : 'monthly')}</span></td>
+              <td>${esc(o.billing_status ?? '')}</td>
               <td>${esc(o.verification_status ?? '')}</td>
               <td>${new Date(o.created_at).toLocaleDateString()}</td>
               <td><button class="manage-btn" data-id="${esc(o.id)}">Manage</button></td>
             </tr>`,
             )
-            .join('') || '<tr><td colspan="7" class="muted">No organisations yet.</td></tr>'}
+            .join('') || '<tr><td colspan="8" class="muted">No organisations yet.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -279,6 +281,10 @@ async function renderMain(status) {
 // (platform.ts's `ownerOnly` gate) — a `support` admin sees the same
 // buttons but gets a clean 403 message if they try one, rather than this
 // page trying to duplicate the role check.
+const TIER_LABEL = { starter: 'Starter', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+const naira = (v) => (v === null || v === undefined ? '—' : '₦' + Number(v).toLocaleString());
+const INVOICE_KIND = { monthly_base: 'Monthly base', cohort_cycle_base: 'Cycle base', cohort_completion: 'Assessments', report_overage: 'Extra report' };
+
 async function renderOrgDetail(orgId, status) {
   let org;
   try {
@@ -293,6 +299,7 @@ async function renderOrgDetail(orgId, status) {
   const isPendingVerification = org.verification_status === 'pending';
   const isBanned = org.verification_status === 'banned';
   const admin = org.members.find((m) => m.role === 'admin') ?? org.members[0];
+  const b = org.billing;
 
   render(`
     <h1>Daprova Platform</h1>
@@ -300,7 +307,7 @@ async function renderOrgDetail(orgId, status) {
     <h2>${esc(org.name)} ${org.deleted_at ? '<span class="muted">(closed)</span>' : ''}</h2>
     <div class="card">
       <p><strong>Slug:</strong> ${esc(org.slug)} &nbsp; <strong>Billing status:</strong> ${esc(org.billing_status)} &nbsp;
-         <strong>Free trial used:</strong> ${org.has_used_free_trial ? 'yes' : 'no'} &nbsp;
+         <strong>Free cohorts left:</strong> ${esc(org.free_cohorts_remaining)} &nbsp;
          <strong>Signup review:</strong> ${esc(org.signup_review_status ?? 'none')} &nbsp;
          <strong>Verification status:</strong> ${esc(org.verification_status)}</p>
       ${status?.error ? `<p class="error">${esc(status.error)}</p>` : ''}
@@ -313,7 +320,7 @@ async function renderOrgDetail(orgId, status) {
             : '<button id="suspend-btn">Suspend org</button>'
         }
         ${!isBanned ? '<button id="ban-btn">Ban</button>' : ''}
-        <button id="extend-trial-btn">Grant free-trial exception</button>
+        <button id="extend-trial-btn">Grant a free cohort</button>
         <button id="close-org-btn">Close org</button>
       </div>
     </div>
@@ -355,22 +362,67 @@ async function renderOrgDetail(orgId, status) {
       </table>
     </div>
 
+    <h3>Plan &amp; pricing</h3>
+    <div class="card">
+      <p><strong>Plan:</strong> ${esc(b.tier.display_name)}${org.is_enterprise_custom ? ' (custom agreement)' : ''} since ${esc(new Date(b.tier_effective_date).toLocaleDateString())}
+         &nbsp; <strong>Billed:</strong> ${esc(b.billing_frequency)} &nbsp; <strong>Pricing version:</strong> ${esc(b.pricing_version)}</p>
+      <p><strong>Learners, last 12 months:</strong> ${esc(b.volume.trailing_12_months)} (fits ${esc(TIER_LABEL[b.volume.tier_by_volume])})
+         &nbsp; <strong>Projected / year:</strong> ${esc(b.volume.projected ?? '—')}
+         ${b.pending_tier ? ` &nbsp; <strong>Pending move to:</strong> ${esc(TIER_LABEL[b.pending_tier])}` : ''}</p>
+      <p><strong>Open cohorts:</strong> ${esc(b.cohorts.open)} / ${esc(b.cohorts.limit ?? '∞')} &nbsp;
+         <strong>Reports this year:</strong> ${esc(b.quota.used)} / ${esc(b.quota.included ?? '∞')} &nbsp;
+         <strong>Trial:</strong> ${b.trial.active ? 'active' : 'billing started ' + esc(new Date(org.billing_started_at).toLocaleDateString())} &nbsp;
+         <strong>Outstanding:</strong> ${esc(b.outstanding.count)} · ${esc(naira(b.outstanding.total_ngn))}
+         ${b.blocked ? ` &nbsp; <strong class="error">Blocked by ${esc(b.blocked.invoice_number)}</strong>` : ''}</p>
+      <p class="muted">A manual plan change applies now; at the next renewal the plan follows actual volume again unless the org is on a custom Enterprise agreement.</p>
+      <div class="actions">
+        <label>Plan <select id="pricing-tier">${Object.entries(TIER_LABEL).map(([k, v]) => `<option value="${k}" ${k === org.pricing_tier ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label>Billing <select id="pricing-frequency">${['monthly', 'per_cohort_cycle'].map((f) => `<option value="${f}" ${f === org.billing_frequency ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+        <label>Projected / year <input id="pricing-projected" type="number" min="0" style="width:90px" value="${esc(org.projected_students_per_year ?? '')}"></label>
+        <label><input id="pricing-custom" type="checkbox" ${org.is_enterprise_custom ? 'checked' : ''}> Custom Enterprise agreement</label>
+      </div>
+      <p class="muted">Custom pricing JSON (Enterprise only — overrides any tier fields, e.g. {"base_fee_monthly_ngn": 450000, "funder_reports_included_per_year": 40}):</p>
+      <textarea id="pricing-custom-json" rows="3" style="width:100%">${esc(org.custom_pricing_json ? JSON.stringify(org.custom_pricing_json) : '')}</textarea>
+      <div class="actions"><button id="save-pricing-btn">Save pricing</button> <button id="run-billing-btn">Run billing job now</button></div>
+    </div>
+
+    <h3>Invoices</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Number</th><th>For</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          ${org.invoices
+            .map(
+              (i) => `
+            <tr>
+              <td>${esc(i.invoice_number)}</td>
+              <td>${esc(INVOICE_KIND[i.kind] ?? i.kind)}${i.cohort_name ? ` · ${esc(i.cohort_name)}` : ''}</td>
+              <td>${esc(naira(i.total_ngn))}</td>
+              <td>${esc(new Date(i.due_date).toLocaleDateString())}</td>
+              <td>${esc(i.status)}${i.notes ? `<br><span class="muted">${esc(i.notes)}</span>` : ''}</td>
+              <td>${
+                i.status === 'pending' || i.status === 'overdue'
+                  ? `<button class="settle-btn" data-id="${esc(i.id)}" data-action="mark_paid">Mark paid</button> <button class="settle-btn" data-id="${esc(i.id)}" data-action="void">Void</button>`
+                  : ''
+              }</td>
+            </tr>`,
+            )
+            .join('') || '<tr><td colspan="6" class="muted">No invoices.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
     <h3>Cohorts</h3>
     <div class="card">
       <table>
-        <thead><tr><th>Name</th><th>Status</th><th>Students</th><th>Tier</th><th>Override to</th></tr></thead>
+        <thead><tr><th>Name</th><th>Status</th><th>Students</th><th>Free trial</th><th>Finalised</th></tr></thead>
         <tbody>
           ${org.cohorts
             .map(
               (c) => `
             <tr>
-              <td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${esc(c.student_count)}</td><td>${esc(c.plan_tier_at_creation ?? '(none)')}</td>
-              <td>
-                <select class="tier-select" data-cohort-id="${esc(c.id)}">
-                  ${['FREE_TRIAL', 'ENTRY', 'GROWTH', 'SCALE_1', 'SCALE_2', 'ENTERPRISE'].map((t) => `<option value="${t}">${t}</option>`).join('')}
-                </select>
-                <button class="override-tier-btn" data-cohort-id="${esc(c.id)}">Override</button>
-              </td>
+              <td>${esc(c.name)}</td><td>${esc(c.status)}</td><td>${esc(c.student_count)}</td><td>${c.is_free_trial ? 'yes' : ''}</td>
+              <td>${c.finalized_at ? esc(new Date(c.finalized_at).toLocaleDateString()) : ''}</td>
             </tr>`,
             )
             .join('') || '<tr><td colspan="5" class="muted">No cohorts.</td></tr>'}
@@ -381,7 +433,7 @@ async function renderOrgDetail(orgId, status) {
     <h3>Manually correct billing status</h3>
     <div class="card">
       <select id="billing-status-select">
-        ${['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended'].map((s) => `<option value="${s}" ${s === org.billing_status ? 'selected' : ''}>${s}</option>`).join('')}
+        ${['active', 'pending_manual_quote', 'suspended'].map((s) => `<option value="${s}" ${s === org.billing_status ? 'selected' : ''}>${s}</option>`).join('')}
       </select>
       <button id="correct-billing-btn">Apply</button>
     </div>
@@ -415,13 +467,41 @@ async function renderOrgDetail(orgId, status) {
       }),
     ),
   );
-  document.querySelectorAll('.override-tier-btn').forEach((btn) => {
+  document.getElementById('save-pricing-btn').addEventListener('click', () => {
+    const raw = document.getElementById('pricing-custom-json').value.trim();
+    let custom = null;
+    if (raw) {
+      try {
+        custom = JSON.parse(raw);
+      } catch {
+        renderOrgDetail(orgId, { error: 'Custom pricing JSON is not valid JSON.' });
+        return;
+      }
+    }
+    const projected = document.getElementById('pricing-projected').value;
+    act(() =>
+      api(`/api/v1/platform/orgs/${orgId}/pricing`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          pricing_tier: document.getElementById('pricing-tier').value,
+          billing_frequency: document.getElementById('pricing-frequency').value,
+          projected_students_per_year: projected === '' ? null : Number(projected),
+          is_enterprise_custom: document.getElementById('pricing-custom').checked,
+          custom_pricing_json: custom,
+        }),
+      }),
+    );
+  });
+  document.getElementById('run-billing-btn').addEventListener('click', () => act(() => api('/api/v1/platform/billing/run', { method: 'POST' })));
+  document.querySelectorAll('.settle-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const select = document.querySelector(`.tier-select[data-cohort-id="${btn.dataset.cohortId}"]`);
+      const verb = btn.dataset.action === 'void' ? 'Void' : 'Mark as paid';
+      const note = prompt(`${verb} this invoice? Optional note (e.g. bank transfer reference):`);
+      if (note === null) return;
       act(() =>
-        api(`/api/v1/platform/orgs/${orgId}/override-tier`, {
+        api(`/api/v1/platform/invoices/${btn.dataset.id}/settle`, {
           method: 'POST',
-          body: JSON.stringify({ cohort_id: btn.dataset.cohortId, new_tier: select.value }),
+          body: JSON.stringify({ action: btn.dataset.action, note: note.trim() || undefined }),
         }),
       );
     });

@@ -6,6 +6,7 @@ import { badRequest } from '../lib/errors.js';
 import * as cohortService from '../services/cohortService.js';
 import * as frameworkService from '../services/frameworkService.js';
 import * as insightsService from '../services/insightsService.js';
+import * as billing from '../services/billing/index.js';
 
 export const coursesRouter = Router();
 coursesRouter.use(requireAuth, requireRole('admin'));
@@ -200,6 +201,7 @@ coursesRouter.post('/:id/areas/:areaId/questions/import', async (req, res, next)
 // Every cohort of this course side by side (mean pre/post/gain, pass rate).
 coursesRouter.get('/:id/comparison', async (req, res, next) => {
   try {
+    await billing.assertFeature(req.auth!.org_id!, 'multi_cohort_trend_comparison');
     res.json(await insightsService.courseComparison(req.auth!.org_id!, req.params.id));
   } catch (err) {
     next(err);

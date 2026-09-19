@@ -1,6 +1,6 @@
 import { db } from '../db/index.js';
 import { badRequest, notFound } from './errors.js';
-import { hasFeature } from '../services/pricingService.js';
+import { hasFeature } from '../services/billing/plan.js';
 import { DAPROVA_MARK_PNG_BASE64 } from './daprovaMarkPng.js';
 
 export const DEFAULT_BRAND_COLOR = '#0e7c5a';
@@ -10,10 +10,11 @@ export type Logo = { data: Buffer; mime: 'image/png' | 'image/jpeg' };
 
 export type Branding = {
   orgName: string;
-  // True when the org's own logo/colour is applied (the cohort's tier
-  // includes custom_branding and the org has set something); otherwise
-  // Daprova's own mark and colour are used.
+  // True when the org has set its own logo/colour (every tier: documents
+  // are co-branded); otherwise Daprova's own mark and colour are used.
   custom: boolean;
+  // Enterprise white-label option: no "Measured with Daprova" credit.
+  whiteLabel: boolean;
   color: string;
   logo: Logo;
   // Public URL for the org's logo, when custom — for web pages; documents
@@ -76,14 +77,15 @@ export async function brandingForCohort(orgId: string, cohortId: string): Promis
     .executeTakeFirst();
   if (!org) throw notFound('Organisation not found');
 
-  const hasOwn = !!org.logo_data || !!org.brand_color;
-  const custom = hasOwn && (await hasFeature(orgId, cohortId, 'custom_branding'));
-  if (!custom) return { orgName: org.name, custom: false, color: DEFAULT_BRAND_COLOR, logo: daprovaLogo(), logoUrl: null };
+  const custom = !!org.logo_data || !!org.brand_color;
+  const whiteLabel = custom && (await hasFeature(orgId, 'certificate_white_label_option'));
+  if (!custom) return { orgName: org.name, custom: false, whiteLabel: false, color: DEFAULT_BRAND_COLOR, logo: daprovaLogo(), logoUrl: null };
 
   const ownLogo = org.logo_data && org.logo_mime ? { data: org.logo_data, mime: org.logo_mime as Logo['mime'] } : null;
   return {
     orgName: org.name,
     custom: true,
+    whiteLabel,
     color: org.brand_color ?? DEFAULT_BRAND_COLOR,
     logo: ownLogo ?? daprovaLogo(),
     logoUrl: ownLogo ? orgLogoPath(org.id, org.logo_updated_at as unknown as string) : null,

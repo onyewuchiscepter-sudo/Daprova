@@ -7,7 +7,7 @@ import * as cohortService from '../services/cohortService.js';
 import * as analyticsService from '../services/analyticsService.js';
 import * as dataQualityService from '../services/dataQualityService.js';
 import * as reportService from '../services/reportService.js';
-import * as paymentService from '../services/paymentService.js';
+import * as billing from '../services/billing/index.js';
 import * as reminderService from '../services/reminderService.js';
 import * as shareService from '../services/shareService.js';
 import * as certificateService from '../services/certificateService.js';
@@ -43,7 +43,9 @@ const updateCohortSchema = z.object({
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   graduation_date: z.string().optional(),
-  status: z.enum(['setup', 'active', 'graduated', 'closed']).optional(),
+  // Ending a cohort goes through POST /:id/finalize (which invoices it), not
+  // a status edit.
+  status: z.enum(['setup', 'active']).optional(),
 });
 cohortsRouter.patch('/:id', async (req, res, next) => {
   try {
@@ -97,6 +99,7 @@ const regenerateLinkSchema = z.object({ type: z.enum(['pre', 'post', 'satisfacti
 cohortsRouter.post('/:id/regenerate-link', async (req, res, next) => {
   try {
     const body = parse(regenerateLinkSchema, req.body);
+    if (body.type === 'tracer') await billing.assertFeature(req.auth!.org_id!, 'tracer_survey');
     res.json(await cohortService.regenerateLinkToken(req.auth!.org_id!, req.params.id, body.type));
   } catch (err) {
     next(err);
@@ -118,6 +121,10 @@ cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
   try {
     const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     const filters = parse(dashboardFiltersSchema, req.query);
+    // Pricing spec §2 analytics_scores: "basic" (Starter) is headline scores
+    // only — no demographic filtering, effect size or self-rating breakdown.
+    const basic = cohort.plan.features.analytics_scores === 'basic';
+    if (basic && Object.values(filters).some(Boolean)) await billing.assertFeature(req.auth!.org_id!, 'equity_dashboard');
     const passThreshold = Number(cohort.pass_threshold);
     const [gains, effectSize, competencyBreakdown, passRate, selfRatings] = await Promise.all([
       analyticsService.getMeanGain(cohort.id, filters),
@@ -128,11 +135,12 @@ cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
     ]);
     res.json({
       ...gains,
-      cohens_d: effectSize.cohens_d,
+      cohens_d: basic ? null : effectSize.cohens_d,
       pass_threshold: passThreshold,
       pass_rate: passRate,
       competency_breakdown: competencyBreakdown,
-      self_ratings: selfRatings,
+      self_ratings: basic ? [] : selfRatings,
+      analytics_level: cohort.plan.features.analytics_scores,
     });
   } catch (err) {
     next(err);
@@ -143,6 +151,7 @@ cohortsRouter.get('/:id/dashboard', async (req, res, next) => {
 // in one response rather than one call per dimension.
 cohortsRouter.get('/:id/equity', async (req, res, next) => {
   try {
+    await billing.assertFeature(req.auth!.org_id!, 'equity_dashboard');
     const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     const dimensions = ['gender', 'age_group', 'location_type', 'disability'] as const;
     const breakdowns = await Promise.all(dimensions.map((d) => analyticsService.getEquityBreakdown(cohort.id, d)));
@@ -173,7 +182,9 @@ const generateReportSchema = z.object({
 cohortsRouter.post('/:id/reports', async (req, res, next) => {
   try {
     const body = generateReportSchema.parse(req.body);
-    const report = await reportService.generateReport(req.auth!.org_id!, req.params.id, body.template, body.narrative, req.auth!.sub);
+    const report = await reportService.generateReport(req.auth!.org_id!, req.params.id, body.template, body.narrative, req.auth!.sub, {
+      confirmOverage: req.body?.confirm_overage === true,
+    });
     res.status(201).json(report);
   } catch (err) {
     next(err instanceof z.ZodError ? badRequest('Invalid request body', err.flatten()) : err);
@@ -200,12 +211,19 @@ cohortsRouter.get('/:id/reports', async (req, res, next) => {
   }
 });
 
-// docs/org-onboarding-spec.md §5.6 — surfaced from the "block" capacity
-// banner (CohortDashboardPage.tsx) as an "Upgrade now" action.
-cohortsRouter.post('/:id/upgrade', async (req, res, next) => {
+// Pricing spec §4 — close the post-assessment window and invoice the
+// cohort's assessment fees. The preview shows the charge before confirming.
+cohortsRouter.get('/:id/finalize', async (req, res, next) => {
   try {
-    const purpose = req.body?.purpose === 'feature' ? 'feature' : 'capacity';
-    res.status(201).json(await paymentService.requestUpgrade(req.auth!.org_id!, req.params.id, purpose));
+    res.json(await billing.finalizePreview(req.auth!.org_id!, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+cohortsRouter.post('/:id/finalize', async (req, res, next) => {
+  try {
+    res.json(await billing.finalizeCohort(req.auth!.org_id!, req.params.id, req.auth!.sub));
   } catch (err) {
     next(err);
   }
@@ -226,6 +244,7 @@ cohortsRouter.post('/:id/run-outlier-detection', async (req, res, next) => {
 // Module 6 — tracer (follow-up) survey results.
 cohortsRouter.get('/:id/outcomes', async (req, res, next) => {
   try {
+    await billing.assertFeature(req.auth!.org_id!, 'tracer_survey');
     const cohort = await cohortService.getCohort(req.auth!.org_id!, req.params.id);
     res.json(await analyticsService.getOutcomesSummary(cohort.id));
   } catch (err) {
@@ -248,6 +267,7 @@ const reminderKind = z.enum(['post', 'satisfaction', 'tracer']);
 cohortsRouter.get('/:id/reminders', async (req, res, next) => {
   try {
     const kind = reminderKind.catch('post').parse(req.query.kind);
+    if (kind === 'tracer') await billing.assertFeature(req.auth!.org_id!, 'tracer_survey');
     res.json(await reminderService.getReminderCandidates(req.auth!.org_id!, req.params.id, kind));
   } catch (err) {
     next(err);
@@ -262,6 +282,7 @@ const sendRemindersSchema = z.object({
 cohortsRouter.post('/:id/reminders', async (req, res, next) => {
   try {
     const body = parse(sendRemindersSchema, req.body);
+    if (body.kind === 'tracer') await billing.assertFeature(req.auth!.org_id!, 'tracer_survey');
     res.json(await reminderService.sendReminders(req.auth!.org_id!, req.params.id, body.kind, body.channel, req.auth!.sub, body.learner_ids));
   } catch (err) {
     next(err);

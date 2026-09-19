@@ -6,9 +6,15 @@ export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:4001'
 // `new Error(message)` would otherwise silently drop on the floor.
 export class ApiError extends Error {
   details?: unknown;
-  constructor(message: string, details?: unknown) {
+  // Machine-readable error code from the API (e.g. UPGRADE_REQUIRED,
+  // REPORT_OVERAGE, BILLING_OVERDUE, COHORT_LIMIT, CONTACT_SALES).
+  code?: string;
+  status?: number;
+  constructor(message: string, details?: unknown, code?: string, status?: number) {
     super(message);
     this.details = details;
+    this.code = code;
+    this.status = status;
   }
 }
 
@@ -30,7 +36,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body?.error?.message ?? `Request failed: ${res.status}`, body?.error?.details);
+    throw new ApiError(body?.error?.message ?? `Request failed: ${res.status}`, body?.error?.details, body?.error?.code, res.status);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -44,7 +50,7 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body?.error?.message ?? `Request failed: ${res.status}`, body?.error?.details);
+    throw new ApiError(body?.error?.message ?? `Request failed: ${res.status}`, body?.error?.details, body?.error?.code, res.status);
   }
   return res.blob();
 }
@@ -57,7 +63,7 @@ export async function apiPostBlob(path: string, body: unknown): Promise<{ blob: 
   const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new ApiError(err?.error?.message ?? `Request failed: ${res.status}`, err?.error?.details);
+    throw new ApiError(err?.error?.message ?? `Request failed: ${res.status}`, err?.error?.details, err?.error?.code, res.status);
   }
   return { blob: await res.blob(), headers: res.headers };
 }

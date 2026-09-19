@@ -28,7 +28,7 @@ export function drawBrandBar(doc: PDFKit.PDFDocument, branding: Branding) {
   const top = doc.page.margins.top;
   doc.image(branding.logo.data, MARGIN, top, { fit: [160, 40], valign: 'center' });
   if (branding.custom) {
-    doc.fontSize(8).font('Helvetica').fillColor('#888').text('Measured with Daprova', MARGIN, top + 16, { width: CONTENT_WIDTH, align: 'right' });
+    if (!branding.whiteLabel) doc.fontSize(8).font('Helvetica').fillColor('#888').text('Measured with Daprova', MARGIN, top + 16, { width: CONTENT_WIDTH, align: 'right' });
   } else {
     doc.fontSize(16).font('Helvetica-Bold').fillColor('#12212e').text('daprova', MARGIN + 48, top + 12, { width: 200, continued: true }).fillColor(branding.color).text('.');
   }
@@ -47,7 +47,7 @@ export function drawFooters(doc: PDFKit.PDFDocument, branding: Branding) {
     doc.page.margins.bottom = 0;
     const y = doc.page.height - 34;
     doc.moveTo(MARGIN, y - 6).lineTo(MARGIN + CONTENT_WIDTH, y - 6).strokeColor(branding.color).lineWidth(0.75).stroke();
-    const left = branding.custom ? `${branding.orgName} · Measured with Daprova` : 'Generated with Daprova';
+    const left = branding.whiteLabel ? branding.orgName : branding.custom ? `${branding.orgName} · Measured with Daprova` : 'Generated with Daprova';
     doc.fontSize(8).font('Helvetica').fillColor('#888').text(left, MARGIN, y, { width: CONTENT_WIDTH / 2, lineBreak: false });
     doc.text(`Page ${i - range.start + 1} of ${range.count}`, MARGIN + CONTENT_WIDTH / 2, y, { width: CONTENT_WIDTH / 2, align: 'right', lineBreak: false });
     doc.page.margins.bottom = bottomMargin;

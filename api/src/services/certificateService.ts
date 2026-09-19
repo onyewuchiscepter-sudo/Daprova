@@ -126,7 +126,9 @@ async function renderCertificate(learnerId: string): Promise<{ pdf: Buffer; code
   doc.text(`Completed ${dateText}`, 80, H - 118, { width: 300 });
   doc.text(`Certificate ${code}`, 80, H - 102, { width: 300 });
   doc.text(`Verify at ${verifyUrl(code)}`, W - 380, H - 102, { width: 300, align: 'right' });
-  doc.fontSize(8).fillColor('#888').text(branding.custom ? 'Learning gain measured with Daprova' : 'Issued with Daprova', W - 380, H - 86, { width: 300, align: 'right' });
+  if (!branding.whiteLabel) {
+    doc.fontSize(8).fillColor('#888').text(branding.custom ? 'Learning gain measured with Daprova' : 'Issued with Daprova', W - 380, H - 86, { width: 300, align: 'right' });
+  }
 
   const pdf = await toBuffer(doc);
   const safeName = (data.display_name ?? 'learner').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'learner';

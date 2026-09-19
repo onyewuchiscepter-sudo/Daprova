@@ -7,6 +7,7 @@ const NAV = [
   { to: '/courses', label: 'Courses' },
   { to: '/cohorts', label: 'Cohorts' },
   { to: '/frameworks', label: 'Frameworks' },
+  { to: '/billing', label: 'Billing', adminOnly: true },
   { to: '/team', label: 'Settings' },
 ];
 
@@ -77,7 +78,7 @@ export default function Layout() {
               </span>
             </span>
             <nav className="flex items-center gap-6">
-              {NAV.map((item) => (
+              {NAV.filter((item) => !('adminOnly' in item) || user?.role === 'admin').map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

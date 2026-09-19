@@ -166,7 +166,7 @@ platformRouter.post('/orgs/:id/extend-free-trial', ownerOnly, async (req, res, n
   }
 });
 
-const correctBillingStatusSchema = z.object({ status: z.enum(['active', 'locked_pending_upgrade', 'pending_manual_quote', 'suspended']) });
+const correctBillingStatusSchema = z.object({ status: z.enum(['active', 'pending_manual_quote', 'suspended']) });
 platformRouter.post('/orgs/:id/billing-status', ownerOnly, async (req, res, next) => {
   try {
     const body = correctBillingStatusSchema.safeParse(req.body);
@@ -177,12 +177,39 @@ platformRouter.post('/orgs/:id/billing-status', ownerOnly, async (req, res, next
   }
 });
 
-const overrideTierSchema = z.object({ cohort_id: z.string().uuid(), new_tier: z.string().min(1) });
-platformRouter.post('/orgs/:id/override-tier', ownerOnly, async (req, res, next) => {
+const pricingSchema = z.object({
+  pricing_tier: z.enum(['starter', 'growth', 'scale', 'enterprise']).optional(),
+  billing_frequency: z.enum(['monthly', 'per_cohort_cycle']).optional(),
+  projected_students_per_year: z.number().int().min(0).nullable().optional(),
+  is_enterprise_custom: z.boolean().optional(),
+  custom_pricing_json: z.record(z.unknown()).nullable().optional(),
+});
+platformRouter.put('/orgs/:id/pricing', ownerOnly, async (req, res, next) => {
   try {
-    const body = overrideTierSchema.safeParse(req.body);
+    const body = pricingSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
-    res.json(await platformService.overrideCohortTier(req.auth!.sub, req.params.id, body.data.cohort_id, body.data.new_tier));
+    res.json(await platformService.setOrgPricing(req.auth!.sub, req.params.id, body.data));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const settleSchema = z.object({ action: z.enum(['mark_paid', 'void']), note: z.string().max(300).optional() });
+platformRouter.post('/invoices/:id/settle', ownerOnly, async (req, res, next) => {
+  try {
+    const body = settleSchema.safeParse(req.body);
+    if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
+    res.json(await platformService.settleInvoice(req.auth!.sub, req.params.id, body.data.action, body.data.note));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Runs the hourly billing job now (overdue marking, monthly invoices, tier
+// re-evaluation, auto-finalising cohorts).
+platformRouter.post('/billing/run', ownerOnly, async (_req, res, next) => {
+  try {
+    res.json(await platformService.runBillingNow());
   } catch (err) {
     next(err);
   }

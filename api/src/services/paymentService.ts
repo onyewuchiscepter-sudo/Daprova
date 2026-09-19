@@ -3,59 +3,37 @@ import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import { getNextTier, getTier } from './pricingService.js';
 import { activeProvider, providerFor } from './payments/index.js';
 
-// A checkout nobody finishes shouldn't hold a cohort locked forever.
+// Paying invoices (Pricing & Billing Spec §6) through Paystack, Flutterwave
+// or the test stub. A payment is one checkout attempt for one invoice; the
+// invoice is marked paid only once the gateway confirms the full amount.
+
+// A checkout nobody finishes is dropped after this long (the invoice stays
+// open and can be paid again).
 const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
 
-type UpgradePurpose = 'capacity' | 'feature';
+// Idempotent: while a checkout for the invoice is still open, the same
+// checkout URL is returned instead of opening a second one.
+export async function startInvoicePayment(orgId: string, invoiceId: string) {
+  const invoice = await db.selectFrom('invoices').selectAll().where('id', '=', invoiceId).where('org_id', '=', orgId).where('deleted_at', 'is', null).executeTakeFirst();
+  if (!invoice) throw notFound('Invoice not found');
+  if (invoice.status === 'paid') throw badRequest('This invoice is already paid.');
+  if (invoice.status === 'void') throw badRequest('This invoice has been cancelled.');
 
-async function assertCohortInOrg(orgId: string, cohortId: string) {
-  const cohort = await db
-    .selectFrom('cohorts')
-    .innerJoin('courses', 'courses.id', 'cohorts.course_id')
-    .selectAll('cohorts')
-    .where('cohorts.id', '=', cohortId)
-    .where('courses.org_id', '=', orgId)
-    .executeTakeFirst();
-  if (!cohort) throw notFound('Cohort not found');
-  return cohort;
-}
-
-// docs/org-onboarding-spec.md §5.6 steps 1-2. Idempotent: calling this
-// again while a payment is already pending for the cohort returns that same
-// invoice's checkout URL rather than opening a second one — otherwise every
-// re-click of "Upgrade now" would mint a fresh reference and orphan the
-// previous one.
-//
-// purpose: "capacity" is the original flow (the cohort hit its student cap,
-// so it's locked until the payment resolves); "feature" is upgrading to
-// unlock a tier feature such as funder reports, which must not lock a
-// cohort that is otherwise running fine.
-export async function requestUpgrade(orgId: string, cohortId: string, purpose: UpgradePurpose = 'capacity') {
-  const cohort = await assertCohortInOrg(orgId, cohortId);
-  if (!cohort.plan_tier_at_creation) {
-    throw badRequest('This cohort has no assigned tier yet — it predates the pricing engine and is not billed.');
-  }
-
-  const existing = await db.selectFrom('payments').selectAll().where('cohort_id', '=', cohortId).where('status', '=', 'pending').executeTakeFirst();
+  const existing = await db.selectFrom('payments').selectAll().where('invoice_id', '=', invoiceId).where('status', '=', 'pending').executeTakeFirst();
   if (existing?.checkout_url) return { payment: existing, checkoutUrl: existing.checkout_url };
-
-  const targetTier = await getNextTier(cohort.plan_tier_at_creation);
-  if (targetTier.price === null) {
-    throw badRequest('The next tier is Enterprise, which requires a custom quote rather than self-serve payment — contact sales.');
-  }
 
   const org = await db.selectFrom('organisations').select(['contact_email', 'name']).where('id', '=', orgId).executeTakeFirstOrThrow();
   const provider = activeProvider();
   const reference = `dpv_${crypto.randomUUID().replace(/-/g, '')}`;
+  const amount = Number(invoice.total_ngn);
 
-  // Our invoice exists before the provider is called, so a provider-side
-  // charge can always be matched back to a row even if we crash mid-way.
+  // Our record exists before the provider is called, so a provider-side
+  // charge can always be matched back even if we crash mid-way.
   const payment = await db
     .insertInto('payments')
-    .values({ org_id: orgId, cohort_id: cohortId, amount: String(targetTier.price), provider: provider.name, reference, target_tier: targetTier.tier_id, purpose })
+    .values({ org_id: orgId, cohort_id: invoice.cohort_id, amount: String(amount), provider: provider.name, reference, target_tier: null, purpose: 'invoice', invoice_id: invoiceId })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -63,11 +41,11 @@ export async function requestUpgrade(orgId: string, cohortId: string, purpose: U
   try {
     ({ checkoutUrl } = await provider.initialize({
       reference,
-      amountNaira: targetTier.price,
+      amountNaira: amount,
       email: org.contact_email,
-      description: `${org.name}: upgrade "${cohort.name}" to ${targetTier.name}`,
-      callbackUrl: `${env.adminDashboardOrigin}/cohorts/${cohortId}?payment=${reference}`,
-      metadata: { org_id: orgId, cohort_id: cohortId, target_tier: targetTier.tier_id },
+      description: `${org.name}: Daprova invoice ${invoice.invoice_number}`,
+      callbackUrl: `${env.adminDashboardOrigin}/billing?payment=${reference}`,
+      metadata: { org_id: orgId, invoice_id: invoiceId, invoice_number: invoice.invoice_number },
     }));
   } catch (err) {
     await db.updateTable('payments').set({ status: 'failed', failure_reason: (err as Error).message }).where('id', '=', payment.id).execute();
@@ -75,37 +53,21 @@ export async function requestUpgrade(orgId: string, cohortId: string, purpose: U
   }
 
   const updated = await db.updateTable('payments').set({ checkout_url: checkoutUrl }).where('id', '=', payment.id).returningAll().executeTakeFirstOrThrow();
-
-  // docs/org-onboarding-spec.md §5.6 step 4 — a capacity upgrade locks the
-  // cohort immediately: existing data stays visible/read-only, but nothing
-  // new happens until the payment resolves one way or the other.
-  if (purpose === 'capacity') {
-    await db.updateTable('cohorts').set({ status: 'locked_pending_upgrade' }).where('id', '=', cohortId).execute();
-  }
-
   return { payment: updated, checkoutUrl };
 }
 
-async function unlockIfLocked(cohortId: string) {
-  await db.updateTable('cohorts').set({ status: 'active' }).where('id', '=', cohortId).where('status', '=', 'locked_pending_upgrade').execute();
-}
-
-async function markUnsuccessful(paymentId: string, cohortId: string, status: 'failed' | 'abandoned', reason?: string) {
-  const payment = await db
+async function markUnsuccessful(paymentId: string, status: 'failed' | 'abandoned', reason?: string) {
+  return db
     .updateTable('payments')
     .set({ status, failure_reason: reason ?? null })
     .where('id', '=', paymentId)
     .where('status', '=', 'pending')
     .returningAll()
     .executeTakeFirst();
-  await unlockIfLocked(cohortId);
-  return payment;
 }
 
-// §5.6 step 3 + §5.4's mid-cohort-upgrade rule — re-tier the whole cohort
-// (not just the overage), unlock the new tier's features, and reactivate it.
 // The status guard makes a second delivery (webhook + reconciliation, or a
-// retried webhook) a no-op instead of applying the tier change twice.
+// retried webhook) a no-op.
 async function markConfirmed(paymentId: string, providerTransactionId?: string) {
   return db.transaction().execute(async (trx) => {
     const payment = await trx
@@ -116,13 +78,14 @@ async function markConfirmed(paymentId: string, providerTransactionId?: string) 
       .returningAll()
       .executeTakeFirst();
     if (!payment) return undefined;
-
-    const cohort = await trx.selectFrom('cohorts').select(['plan_tier_at_creation']).where('id', '=', payment.cohort_id).executeTakeFirst();
-    await trx.updateTable('cohorts').set({ plan_tier_at_creation: payment.target_tier, status: 'active' }).where('id', '=', payment.cohort_id).execute();
-    await trx
-      .insertInto('cohort_tier_history')
-      .values({ cohort_id: payment.cohort_id, old_tier: cohort?.plan_tier_at_creation ?? null, new_tier: payment.target_tier, payment_id: payment.id })
-      .execute();
+    if (payment.invoice_id) {
+      await trx
+        .updateTable('invoices')
+        .set({ status: 'paid', paid_at: sql`now()` })
+        .where('id', '=', payment.invoice_id)
+        .where('status', 'in', ['pending', 'overdue'])
+        .execute();
+    }
     return payment;
   });
 }
@@ -130,8 +93,8 @@ async function markConfirmed(paymentId: string, providerTransactionId?: string) 
 // The one place a payment's outcome is decided: always by asking the
 // provider it was opened with (never by trusting a webhook body or a
 // redirect's query string), and only honoured if the amount and currency
-// actually charged match our invoice. Shared by the webhook routes, the
-// "I've paid" redirect check and the reconciliation cron.
+// actually charged cover the invoice. Shared by the webhook routes, the
+// post-checkout redirect check and the reconciliation cron.
 export async function resolvePayment(reference: string) {
   const payment = await db.selectFrom('payments').selectAll().where('reference', '=', reference).executeTakeFirst();
   if (!payment) throw notFound('Payment not found');
@@ -141,37 +104,37 @@ export async function resolvePayment(reference: string) {
 
   if (result.status === 'success') {
     const expected = Number(payment.amount);
-    const isStub = payment.provider === 'stub';
-    if (!isStub && (result.currency !== 'NGN' || result.amountNaira === undefined || result.amountNaira < expected)) {
-      console.error(`[payments] ${reference}: provider reported ${result.currency} ${result.amountNaira}, invoice is NGN ${expected}`);
-      return (await markUnsuccessful(payment.id, payment.cohort_id, 'failed', 'Amount or currency did not match the invoice')) ?? payment;
+    if (payment.provider !== 'stub' && (result.currency !== 'NGN' || result.amountNaira === undefined || result.amountNaira < expected)) {
+      console.error(`[payments] ${reference}: provider reported ${result.currency} ${result.amountNaira}, expected NGN ${expected}`);
+      return (await markUnsuccessful(payment.id, 'failed', 'Amount or currency did not match the invoice')) ?? payment;
     }
     return (await markConfirmed(payment.id, result.providerTransactionId)) ?? payment;
   }
-
   if (result.status === 'failed') {
-    return (await markUnsuccessful(payment.id, payment.cohort_id, 'failed', result.failureReason)) ?? payment;
+    return (await markUnsuccessful(payment.id, 'failed', result.failureReason)) ?? payment;
   }
-
   if (Date.now() - new Date(payment.created_at as unknown as string).getTime() > ABANDON_AFTER_MS) {
-    return (await markUnsuccessful(payment.id, payment.cohort_id, 'abandoned', 'Checkout not completed within 24 hours')) ?? payment;
+    return (await markUnsuccessful(payment.id, 'abandoned', 'Checkout not completed within 24 hours')) ?? payment;
   }
   return payment;
 }
 
-// Called when the provider redirects the admin back to the cohort page, so
-// the upgrade shows up immediately instead of on the next cron tick.
+// Called when the gateway redirects the admin back to the Billing page, so
+// the invoice shows as paid immediately rather than on the next cron tick.
 export async function verifyPaymentForOrg(orgId: string, reference: string) {
   const payment = await db.selectFrom('payments').select(['id']).where('reference', '=', reference).where('org_id', '=', orgId).executeTakeFirst();
   if (!payment) throw notFound('Payment not found');
   const resolved = await resolvePayment(reference);
-  return { reference: resolved.reference, status: resolved.status, target_tier: resolved.target_tier, failure_reason: resolved.failure_reason };
+  const invoice = resolved.invoice_id
+    ? await db.selectFrom('invoices').select(['invoice_number', 'status']).where('id', '=', resolved.invoice_id).executeTakeFirst()
+    : undefined;
+  return { reference: resolved.reference, status: resolved.status, failure_reason: resolved.failure_reason, invoice_number: invoice?.invoice_number ?? null, invoice_status: invoice?.status ?? null };
 }
 
 export async function listPayments(orgId: string) {
   return db
     .selectFrom('payments')
-    .select(['id', 'cohort_id', 'amount', 'status', 'provider', 'reference', 'target_tier', 'purpose', 'paid_at', 'created_at', 'failure_reason'])
+    .select(['id', 'invoice_id', 'amount', 'status', 'provider', 'reference', 'purpose', 'paid_at', 'created_at', 'failure_reason'])
     .where('org_id', '=', orgId)
     .orderBy('created_at', 'desc')
     .execute();
@@ -180,15 +143,13 @@ export async function listPayments(orgId: string) {
 export async function getStubCheckoutInfo(reference: string) {
   const payment = await db.selectFrom('payments').selectAll().where('reference', '=', reference).where('provider', '=', 'stub').executeTakeFirst();
   if (!payment) throw notFound('Payment not found');
-  const tier = await getTier(payment.target_tier);
-  return { payment, tier };
+  const invoice = payment.invoice_id ? await db.selectFrom('invoices').select(['invoice_number']).where('id', '=', payment.invoice_id).executeTakeFirst() : undefined;
+  return { payment, label: invoice ? `Invoice ${invoice.invoice_number}` : 'Daprova payment' };
 }
 
-// docs/org-onboarding-spec.md §5.6 step 6 — "poll payment provider status
-// for pending payments on an interval, don't rely solely on webhook
-// delivery." Catches a provider-side outcome that never reached us as a
-// push, and expires abandoned checkouts. One bad payment (provider outage,
-// bad key) is logged and skipped rather than stopping the rest.
+// docs/org-onboarding-spec.md §5.6 step 6 — poll the provider for pending
+// payments rather than relying only on webhooks, and expire abandoned
+// checkouts. One bad payment is logged and skipped.
 export async function reconcilePendingPayments(): Promise<{ checked: number; resolved: number; errors: number }> {
   const pending = await db.selectFrom('payments').select(['reference']).where('status', '=', 'pending').execute();
   let resolved = 0;

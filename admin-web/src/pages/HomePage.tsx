@@ -21,6 +21,7 @@ type Overview = {
   };
   attention: Array<{ cohort_id: string; cohort_name: string; kind: string; message: string }>;
   cohorts: CohortMetrics[];
+  comparison_available: boolean;
   recent_reports: Array<{ id: string; funder_template: string; generated_at: string; cohort_id: string; cohort_name: string }>;
 };
 
@@ -107,7 +108,16 @@ export default function HomePage() {
       <div className="bg-paper rounded-lg border border-rule p-5">
         <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mb-1">Cohorts compared</h2>
         <p className="text-sm text-ink-soft mb-4">Average scores before and after, per cohort, oldest first.</p>
-        <CohortComparison cohorts={data.cohorts} showCourse />
+        {data.comparison_available ? (
+          <CohortComparison cohorts={data.cohorts} showCourse />
+        ) : (
+          <p className="text-sm text-ink-soft">
+            Comparing results across cohorts over time comes with the Scale plan.{' '}
+            <Link to="/billing" className="text-ink underline">
+              See plans
+            </Link>
+          </p>
+        )}
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

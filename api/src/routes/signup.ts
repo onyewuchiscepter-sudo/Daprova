@@ -27,6 +27,7 @@ const signupSchema = z.object({
   reports_to_funder: z.boolean(),
   reports_to_funder_name: z.string().optional(),
   referral_source: z.enum(REFERRAL_SOURCES),
+  billing_frequency: z.enum(['monthly', 'per_cohort_cycle']).optional(),
 });
 
 function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {

@@ -18,6 +18,7 @@ import AcceptInvitePage from './pages/AcceptInvitePage';
 import ImpersonatePage from './pages/ImpersonatePage';
 import HomePage from './pages/HomePage';
 import SharePage from './pages/SharePage';
+import BillingPage from './pages/BillingPage';
 import VerifyCertificatePage from './pages/VerifyCertificatePage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="/cohorts" element={<CohortsListPage />} />
         <Route path="/cohorts/:id" element={<CohortDashboardPage />} />
         <Route path="/team" element={<TeamPage />} />
+        <Route path="/billing" element={<BillingPage />} />
       </Route>
     </Routes>
   );

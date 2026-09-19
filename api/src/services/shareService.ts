@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
-import { notFound } from '../lib/errors.js';
+import { AppError, notFound } from '../lib/errors.js';
+import { assertFeature, getOrgPlan } from './billing/index.js';
 import { brandingForCohortId } from '../lib/branding.js';
 import * as analyticsService from './analyticsService.js';
 
@@ -23,8 +24,22 @@ async function assertCohort(orgId: string, cohortId: string) {
   if (!row) throw notFound('Cohort not found');
 }
 
+// Pricing spec §5 — live funder links are a plan feature, checked here
+// (server side). Growth's "single funder view" is one active link per
+// cohort; Scale and Enterprise allow one per funder.
 export async function createShareLink(orgId: string, cohortId: string, label: string | undefined, actorPersonId: string) {
   await assertCohort(orgId, cohortId);
+  const tier = await assertFeature(orgId, 'live_funder_monitoring_link');
+  if (tier.features.live_funder_monitoring_link === 'single_funder_view') {
+    const active = await db.selectFrom('cohort_share_links').select('id').where('cohort_id', '=', cohortId).where('revoked_at', 'is', null).executeTakeFirst();
+    if (active) {
+      throw new AppError(403, 'UPGRADE_REQUIRED', 'The Growth plan includes one live funder link per cohort — turn off the existing link first, or move to Scale for one per funder.', {
+        code: 'UPGRADE_REQUIRED',
+        feature: 'live_funder_monitoring_link',
+        required_tier: 'scale',
+      });
+    }
+  }
   return db
     .insertInto('cohort_share_links')
     .values({ cohort_id: cohortId, token: crypto.randomBytes(18).toString('base64url'), label: label?.trim() || null, created_by: actorPersonId })
@@ -61,12 +76,15 @@ export async function getSharedCohort(token: string) {
     .innerJoin('cohorts as co', 'co.id', 'l.cohort_id')
     .innerJoin('courses as c', 'c.id', 'co.course_id')
     .innerJoin('organisations as o', 'o.id', 'c.org_id')
-    .select(['l.id', 'co.id as cohort_id', 'co.name as cohort_name', 'co.start_date', 'co.end_date', 'co.pass_threshold', 'co.course_id', 'c.name as course_name', 'o.name as org_name'])
+    .select(['l.id', 'co.id as cohort_id', 'co.name as cohort_name', 'co.start_date', 'co.end_date', 'co.pass_threshold', 'co.course_id', 'c.name as course_name', 'o.name as org_name', 'o.id as org_id'])
     .where('l.token', '=', token)
     .where('l.revoked_at', 'is', null)
     .where('co.deleted_at', 'is', null)
     .executeTakeFirst();
   if (!link) throw notFound('This link has expired or been turned off by the programme.');
+  // Links stop working if the organisation's plan no longer includes them.
+  const { tier } = await getOrgPlan(link.org_id);
+  if (!tier.features.live_funder_monitoring_link) throw notFound('This link has expired or been turned off by the programme.');
 
   await db
     .updateTable('cohort_share_links')
@@ -104,7 +122,7 @@ export async function getSharedCohort(token: string) {
     cohort_name: link.cohort_name,
     start_date: dateOnly(link.start_date),
     end_date: dateOnly(link.end_date),
-    branding: { custom: branding.custom, color: branding.color, logo_url: branding.logoUrl },
+    branding: { custom: branding.custom, white_label: branding.whiteLabel, color: branding.color, logo_url: branding.logoUrl },
     participation: {
       enrolled: Number(counts.enrolled),
       pre_completed: Number(counts.pre_completed),
@@ -121,7 +139,7 @@ export async function getSharedCohort(token: string) {
     },
     competency_breakdown: breakdown.map((a) => ({ area_name: a.area_name, pre_pct: a.pre_pct, post_pct: a.post_pct })),
     self_ratings: selfRatings.map((a) => ({ area_name: a.area_name, pre_avg: a.pre_avg, post_avg: a.post_avg })),
-    equity: equity.map((e) => ({
+    equity: (tier.features.equity_dashboard ? equity : []).map((e) => ({
       dimension: e.dimension,
       groups: e.groups.filter((g) => g.n >= MIN_GROUP).map((g) => ({ label: g.label, n: g.n, mean_gain: g.mean_gain, pass_rate: g.pass_rate })),
       suppressed_groups: e.groups.filter((g) => g.n < MIN_GROUP).length,
@@ -137,7 +155,7 @@ export async function getSharedCohort(token: string) {
           }
         : null,
     follow_up:
-      outcomes.response_count >= MIN_GROUP
+      tier.features.tracer_survey && outcomes.response_count >= MIN_GROUP
         ? {
             response_count: outcomes.response_count,
             employment: outcomes.employment,

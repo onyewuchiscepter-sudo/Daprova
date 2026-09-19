@@ -57,10 +57,12 @@ export default function CourseDetailPage() {
     queryKey: ['cohorts', id],
     queryFn: () => apiFetch(`/api/v1/courses/${id}/cohorts`),
   });
-  const { data: comparison } = useQuery<{ cohorts: CohortMetrics[] }>({
+  const { data: comparison, error: comparisonError } = useQuery<{ cohorts: CohortMetrics[] }>({
     queryKey: ['course-comparison', id],
     queryFn: () => apiFetch(`/api/v1/courses/${id}/comparison`),
+    retry: false,
   });
+  const comparisonLocked = comparisonError instanceof ApiError && comparisonError.code === 'UPGRADE_REQUIRED';
 
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ['course', id] });
@@ -469,6 +471,15 @@ export default function CourseDetailPage() {
         />
       )}
 
+      {comparisonLocked && (cohorts?.length ?? 0) > 1 && (
+        <p className="mt-8 text-sm text-ink-soft">
+          Comparing this course's cohorts side by side comes with the Scale plan.{' '}
+          <Link to="/billing" className="text-ink underline">
+            See plans
+          </Link>
+        </p>
+      )}
+
       {comparison && comparison.cohorts.some((c) => c.pairs > 0) && (
         <div className="mt-8 bg-paper rounded-lg border border-rule p-5">
           <h2 className="font-display font-semibold text-[18px] tracking-[-0.01em] text-ink mb-1">Cohorts compared</h2>
@@ -501,7 +512,20 @@ export default function CourseDetailPage() {
             value={cohortName}
             onChange={(e) => setCohortName(e.target.value)}
           />
-          {createCohortMutation.isError && <p className="text-sm text-flag">{(createCohortMutation.error as Error).message}</p>}
+          {createCohortMutation.isError && (
+            <p className="text-sm text-flag">
+              {(createCohortMutation.error as Error).message}
+              {createCohortMutation.error instanceof ApiError &&
+                ['COHORT_LIMIT', 'BILLING_OVERDUE', 'CONTACT_SALES', 'UPGRADE_REQUIRED'].includes(createCohortMutation.error.code ?? '') && (
+                  <>
+                    {' '}
+                    <Link to="/billing" className="underline">
+                      Go to billing
+                    </Link>
+                  </>
+                )}
+            </p>
+          )}
           <button
             onClick={() => createCohortMutation.mutate()}
             disabled={!cohortName || createCohortMutation.isPending}

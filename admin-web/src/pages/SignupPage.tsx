@@ -26,6 +26,10 @@ const CADENCES = [
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'continuous_rolling', label: 'Continuous / rolling' },
 ];
+const BILLING_FREQUENCIES = [
+  { value: 'monthly', label: 'Monthly base fee (programmes that run all year)' },
+  { value: 'per_cohort_cycle', label: 'Per cohort cycle (a base fee each time a cohort starts)' },
+];
 const REFERRAL_SOURCES = [
   { value: 'referral', label: 'Referral' },
   { value: 'social_media', label: 'Social media' },
@@ -53,6 +57,7 @@ export default function SignupPage() {
   const [useCase, setUseCase] = useState(USE_CASES[0].value);
   const [expectedStudentCount, setExpectedStudentCount] = useState('');
   const [cadence, setCadence] = useState(CADENCES[0].value);
+  const [billingFrequency, setBillingFrequency] = useState(BILLING_FREQUENCIES[0].value);
 
   const [reportsToFunder, setReportsToFunder] = useState(false);
   const [reportsToFunderName, setReportsToFunderName] = useState('');
@@ -83,6 +88,7 @@ export default function SignupPage() {
           primary_use_case: useCase,
           expected_student_count: Number(expectedStudentCount),
           expected_cadence: cadence,
+          billing_frequency: billingFrequency,
           reports_to_funder: reportsToFunder,
           reports_to_funder_name: reportsToFunder ? reportsToFunderName || undefined : undefined,
           referral_source: referralSource,
@@ -149,15 +155,16 @@ export default function SignupPage() {
         <Fieldset legend="How you'll use it">
           <SelectField label="Primary use case" value={useCase} onChange={setUseCase} options={USE_CASES} />
           <Field
-            label="Expected students in your first cohort"
+            label="Learners you expect to assess in a year"
             value={expectedStudentCount}
             onChange={setExpectedStudentCount}
             type="number"
             required
             min={1}
-            hint="Sets your starting plan. You can change it later."
+            hint="Sets your starting plan: Starter under 250, Growth 250–499, Scale 500–999; 1,000+ is Enterprise. After that your plan follows your actual numbers. Your first cohort is free."
           />
           <SelectField label="How often you run cohorts" value={cadence} onChange={setCadence} options={CADENCES} />
+          <SelectField label="How you'd like to be billed" value={billingFrequency} onChange={setBillingFrequency} options={BILLING_FREQUENCIES} />
         </Fieldset>
 
         <Fieldset legend="Context">

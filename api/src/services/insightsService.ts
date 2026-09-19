@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
+import { hasFeature } from './billing/index.js';
 
 // Cross-cohort views: the org home dashboard and cohort-vs-cohort
 // comparison. One query computes every cohort's headline numbers; both
@@ -138,6 +139,9 @@ function attentionItems(cohorts: CohortMetrics[]): Attention[] {
 
 export async function orgOverview(orgId: string) {
   const cohorts = await cohortMetrics(orgId);
+  // Pricing spec §5: cohort-vs-cohort comparison is a Scale feature, so
+  // without it the per-cohort scores are left out (totals stay).
+  const canCompare = await hasFeature(orgId, 'multi_cohort_trend_comparison');
   const sum = (k: keyof CohortMetrics) => cohorts.reduce((acc, c) => acc + (c[k] as number), 0);
   const pairs = sum('pairs');
   // Learner-weighted averages across cohorts (not an average of averages).
@@ -170,7 +174,8 @@ export async function orgOverview(orgId: string) {
       reports: sum('reports'),
     },
     attention: attentionItems(cohorts),
-    cohorts,
+    comparison_available: canCompare,
+    cohorts: canCompare ? cohorts : cohorts.map((c) => ({ ...c, mean_pre: null, mean_post: null, mean_gain: null, pass_rate: null })),
     recent_reports: recentReports,
   };
 }
