@@ -198,6 +198,9 @@ const pricingSchema = z.object({
   projected_students_per_year: z.number().int().min(0).nullable().optional(),
   is_enterprise_custom: z.boolean().optional(),
   custom_pricing_json: z.record(z.unknown()).nullable().optional(),
+  tier_lock: z.object({ locked: z.boolean(), until: z.string().datetime({ offset: true }).nullable().optional() }).optional(),
+  bill_difference_now: z.boolean().optional(),
+  notify_org: z.boolean().optional(),
   reason: reasonField,
 });
 platformRouter.put('/orgs/:id/pricing', ownerOnly, async (req, res, next) => {

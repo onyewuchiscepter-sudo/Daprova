@@ -38,6 +38,7 @@ type Summary = {
   tier: Tier;
   tier_effective_date: string;
   pending_tier: string | null;
+  tier_lock: { until: string | null } | null;
   volume: { trailing_12_months: number; tier_by_volume: string; band_min: number; band_max: number | null; projected: number | null; enterprise_threshold: number };
   cohorts: { open: number; limit: number | null; auto_finalize_after_days: number };
   trial: { active: boolean; free_cohorts_remaining: number; free_learners: number; trial_cohort: { id: string; name: string } | null };
@@ -72,6 +73,7 @@ const KIND: Record<string, string> = {
   cohort_cycle_base: 'Cohort cycle base fee',
   cohort_completion: 'Assessments & certificates',
   report_overage: 'Additional funder report',
+  plan_change: 'Plan change',
 };
 const STATUS_STYLE: Record<string, string> = {
   paid: 'bg-gain-wash text-gain-deep',
@@ -243,13 +245,21 @@ export default function BillingPage() {
             {t.display_name} ends at {bandMax.toLocaleString()}
           </span>
         </div>
-        <p className="text-sm text-ink-soft mt-3">
-          Your plan follows your yearly volume and changes automatically at the start of a billing cycle — never backdated.
-          {s.pending_tier && ` Based on your recent volume you'll move to ${TIER_LABEL[s.pending_tier] ?? s.pending_tier} at the next renewal.`}
-          {!s.pending_tier && s.volume.tier_by_volume !== t.tier_id && ` Your recent volume fits ${TIER_LABEL[s.volume.tier_by_volume]}; that applies from your next cycle.`}
-          {nextTier && !nextTier.requires_custom_quote && ` ${nextTier.display_name} starts at ${nextTier.students_per_year_min.toLocaleString()} learners a year.`}
-          {` Programmes of ${s.volume.enterprise_threshold.toLocaleString()}+ learners a year are on Enterprise (contact sales).`}
-        </p>
+        {s.tier_lock ? (
+          <p className="text-sm text-ink-soft mt-3">
+            Your {t.display_name} plan has been set by the Daprova team
+            {s.tier_lock.until ? ` until ${date(s.tier_lock.until)}` : ''}, so it won't change with your learner numbers
+            {s.tier_lock.until ? ' before then' : ''}. Questions about your plan? Reply to any Daprova email or contact us.
+          </p>
+        ) : (
+          <p className="text-sm text-ink-soft mt-3">
+            Your plan follows your yearly volume and changes automatically at the start of a billing cycle — never backdated.
+            {s.pending_tier && ` Based on your recent volume you'll move to ${TIER_LABEL[s.pending_tier] ?? s.pending_tier} at the next renewal.`}
+            {!s.pending_tier && s.volume.tier_by_volume !== t.tier_id && ` Your recent volume fits ${TIER_LABEL[s.volume.tier_by_volume]}; that applies from your next cycle.`}
+            {nextTier && !nextTier.requires_custom_quote && ` ${nextTier.display_name} starts at ${nextTier.students_per_year_min.toLocaleString()} learners a year.`}
+            {` Programmes of ${s.volume.enterprise_threshold.toLocaleString()}+ learners a year are on Enterprise (contact sales).`}
+          </p>
+        )}
       </div>
 
       <div className="bg-paper rounded-lg border border-rule overflow-hidden">

@@ -39,6 +39,8 @@ export interface OrganisationsTable {
   current_period_start: Timestamp | null;
   pending_tier: string | null;
   credit_ngn: Generated<string>;
+  tier_locked: Generated<boolean>;
+  tier_locked_until: Timestamp | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -372,7 +374,7 @@ export interface InvoicesTable {
   invoice_number: string;
   org_id: string;
   cohort_id: string | null;
-  kind: string; // monthly_base | cohort_cycle_base | cohort_completion | report_overage
+  kind: string; // monthly_base | cohort_cycle_base | cohort_completion | report_overage | plan_change
   tier_id: string;
   pricing_version: string;
   billing_period_start: Timestamp;

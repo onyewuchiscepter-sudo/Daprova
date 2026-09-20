@@ -48,7 +48,7 @@ function esc(value) {
 }
 
 const TIER_LABEL = { starter: 'Starter', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
-const INVOICE_KIND = { monthly_base: 'Monthly base', cohort_cycle_base: 'Cycle base', cohort_completion: 'Assessments', report_overage: 'Extra report' };
+const INVOICE_KIND = { monthly_base: 'Monthly base', cohort_cycle_base: 'Cycle base', cohort_completion: 'Assessments', report_overage: 'Extra report', plan_change: 'Plan change' };
 const naira = (v) => (v === null || v === undefined ? '—' : '₦' + Number(v).toLocaleString('en-NG', { maximumFractionDigits: 2 }));
 const day = (v) => (v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const when = (v) => (v ? new Date(v).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
@@ -242,7 +242,7 @@ async function orgsTab(status) {
           (o) => `
         <tr class="clickable" data-id="${esc(o.id)}">
           <td><strong>${esc(o.name)}</strong>${o.deleted_at ? ' <span class="muted">(closed)</span>' : ''}<br><span class="muted">${esc(o.contact_email)}</span></td>
-          <td>${esc(TIER_LABEL[o.pricing_tier] ?? o.pricing_tier)}${o.is_enterprise_custom ? ' (custom)' : ''}<br><span class="muted">${o.billing_frequency === 'per_cohort_cycle' ? 'per cohort' : 'monthly'}${o.billing_started_at ? '' : ' · trial'}</span></td>
+          <td>${esc(TIER_LABEL[o.pricing_tier] ?? o.pricing_tier)}${o.is_enterprise_custom ? ' (custom)' : ''}${o.tier_locked && (!o.tier_locked_until || new Date(o.tier_locked_until) > new Date()) ? ' 🔒' : ''}<br><span class="muted">${o.billing_frequency === 'per_cohort_cycle' ? 'per cohort' : 'monthly'}${o.billing_started_at ? '' : ' · trial'}</span></td>
           <td>${badge(o.billing_status.replace(/_/g, ' '), STATUS_TONE[o.billing_status])} ${badge(o.verification_status, STATUS_TONE[o.verification_status])}</td>
           <td class="num">${Number(o.outstanding_ngn) ? `<span class="${o.has_overdue ? 'bad' : ''}">${esc(naira(o.outstanding_ngn))}</span>` : '—'}${Number(o.credit_ngn) ? `<br><span class="muted">credit ${esc(naira(o.credit_ngn))}</span>` : ''}</td>
           <td class="num">${esc(o.member_count)} / ${esc(o.cohort_count)}</td>
@@ -369,26 +369,50 @@ async function orgDetail(orgId, status) {
 
     <h2>Plan &amp; pricing</h2>
     <div class="card">
-      <p><strong>${esc(b.tier.display_name)}</strong>${org.is_enterprise_custom ? ' (custom agreement)' : ''} since ${esc(day(b.tier_effective_date))} · billed ${esc(b.billing_frequency === 'monthly' ? 'monthly' : 'per cohort')} · pricing ${esc(b.pricing_version)}</p>
+      <p><strong>${esc(b.tier.display_name)}</strong>${org.is_enterprise_custom ? ' (custom agreement)' : ''} since ${esc(day(b.tier_effective_date))} · billed ${esc(b.billing_frequency === 'monthly' ? 'monthly' : 'per cohort')} · pricing ${esc(b.pricing_version)}
+        ${b.tier_lock ? ` · ${badge(b.tier_lock.until ? `locked until ${day(b.tier_lock.until)}` : 'locked', 'pending')}` : ''}</p>
       <p>Learners in the last 12 months: <strong>${esc(b.volume.trailing_12_months)}</strong> (fits ${esc(TIER_LABEL[b.volume.tier_by_volume])}) · projected ${esc(b.volume.projected ?? '—')} / year
         ${b.pending_tier ? ` · <strong>moves to ${esc(TIER_LABEL[b.pending_tier])} at renewal</strong>` : ''}</p>
       <p>Open cohorts ${esc(b.cohorts.open)} / ${esc(b.cohorts.limit ?? '∞')} · reports this year ${esc(b.quota.used)} / ${esc(b.quota.included ?? '∞')} ·
         ${b.trial.active ? `free trial (${esc(org.free_cohorts_remaining)} free cohort(s) left)` : `billing since ${esc(day(org.billing_started_at))}`}
         ${b.blocked ? ` · <span class="bad">blocked by ${esc(b.blocked.invoice_number)}</span>` : ''}</p>
       ${owner ? `
+      <div class="plan-box">
+        <p><strong>Change plan</strong></p>
+        <div class="plan-choices">
+          ${Object.entries(TIER_LABEL)
+            .map(
+              ([k, v]) =>
+                `<label class="plan-choice"><input type="radio" name="plan-tier" value="${k}" ${k === org.pricing_tier ? 'checked' : ''}> ${v}${k === org.pricing_tier ? ' <span class="muted">(current)</span>' : ''}${
+                  k === b.volume.tier_by_volume ? ' <span class="muted">(fits volume)</span>' : ''
+                }</label>`,
+            )
+            .join('')}
+        </div>
+        <label class="inline"><input type="checkbox" id="plan-lock" ${b.tier_lock ? 'checked' : ''}> Keep this plan whatever their learner numbers do</label>
+        <label id="plan-lock-until-wrap" ${b.tier_lock ? '' : 'hidden'}>Until (leave empty to keep it until you change it)
+          <input type="date" id="plan-lock-until" value="${b.tier_lock?.until ? esc(new Date(b.tier_lock.until).toISOString().slice(0, 10)) : ''}"></label>
+        <p class="muted" id="plan-unlocked-note" ${b.tier_lock ? 'hidden' : ''}>Without a lock, the plan goes back to following their learner numbers at the next renewal.</p>
+        ${
+          b.billing_frequency === 'monthly' && org.billing_started_at
+            ? '<label class="inline"><input type="checkbox" id="plan-bill-now"> When upgrading, invoice the base-fee difference for the rest of this month now</label>'
+            : '<p class="muted">The new base fee applies from their next invoice' + (b.trial.active ? ' (they are still in their free trial)' : '') + '.</p>'
+        }
+        <label class="inline"><input type="checkbox" id="plan-notify" checked> Email ${esc(org.contact_email)} about the change</label>
+        <label>Reason (required, kept in the activity log)<input id="plan-reason" minlength="3" placeholder="e.g. Agreed upgrade for their Q4 programme"></label>
+        <button id="save-plan-btn">Save plan</button>
+      </div>
       <details>
-        <summary>Change plan or pricing</summary>
-        <p class="muted">A manual plan change applies now; at the next renewal the plan follows actual volume again unless the org is on a custom Enterprise agreement.</p>
+        <summary>Billing and Enterprise settings</summary>
         <div class="grid3">
-          <label>Plan<select id="pricing-tier">${Object.entries(TIER_LABEL).map(([k, v]) => `<option value="${k}" ${k === org.pricing_tier ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           <label>Billing<select id="pricing-frequency">${[['monthly', 'Monthly'], ['per_cohort_cycle', 'Per cohort']].map(([k, v]) => `<option value="${k}" ${k === org.billing_frequency ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           <label>Projected learners / year<input id="pricing-projected" type="number" min="0" value="${esc(org.projected_students_per_year ?? '')}"></label>
         </div>
         <label class="inline"><input id="pricing-custom" type="checkbox" ${org.is_enterprise_custom ? 'checked' : ''}> Custom Enterprise agreement</label>
         <label>Custom pricing JSON (Enterprise only; overrides tier fields, e.g. {"base_fee_monthly_ngn": 450000, "funder_reports_included_per_year": 40})
           <textarea id="pricing-custom-json" rows="3">${esc(org.custom_pricing_json ? JSON.stringify(org.custom_pricing_json) : '')}</textarea></label>
-        <label>Reason for the change (required)<input id="pricing-reason" minlength="3" placeholder="e.g. Signed Enterprise agreement 12 Sept"></label>
-        <button id="save-pricing-btn">Save pricing</button>
+        <label>Reason (required)<input id="pricing-reason" minlength="3" placeholder="e.g. Signed Enterprise agreement 12 Sept"></label>
+        <button class="secondary" id="save-pricing-btn">Save settings</button>
       </details>
       <div class="actions">
         <button class="secondary" id="extend-trial-btn">Grant a free cohort</button>
@@ -514,6 +538,36 @@ async function orgDetail(orgId, status) {
     e.preventDefault();
     act(() => api(`/api/v1/platform/orgs/${orgId}`, { method: 'PATCH', body: JSON.stringify({ name: $('#p-name').value, contact_email: $('#p-email').value }) }), rerender, 'Details saved.');
   });
+  $('#plan-lock')?.addEventListener('change', (e) => {
+    $('#plan-lock-until-wrap').hidden = !e.target.checked;
+    $('#plan-unlocked-note').hidden = e.target.checked;
+  });
+  $('#save-plan-btn')?.addEventListener('click', () => {
+    const tier = document.querySelector('input[name="plan-tier"]:checked')?.value;
+    const reason = $('#plan-reason').value.trim();
+    if (reason.length < 3) {
+      rerender({ error: 'Give a reason for the plan change (at least 3 characters).' });
+      return;
+    }
+    const locked = $('#plan-lock').checked;
+    const until = $('#plan-lock-until').value;
+    const body = {
+      pricing_tier: tier,
+      tier_lock: { locked, until: locked && until ? new Date(`${until}T23:59:59`).toISOString() : null },
+      bill_difference_now: $('#plan-bill-now')?.checked ?? false,
+      notify_org: $('#plan-notify').checked,
+      reason,
+    };
+    if (tier !== org.pricing_tier && !confirm(`Move ${org.name} from ${TIER_LABEL[org.pricing_tier]} to ${TIER_LABEL[tier]}? Features change immediately.`)) return;
+    act(
+      () => api(`/api/v1/platform/orgs/${orgId}/pricing`, { method: 'PUT', body: JSON.stringify(body) }),
+      rerender,
+      (r) =>
+        `Plan saved: ${TIER_LABEL[r.pricing_tier] ?? r.pricing_tier}${r.tier_locked ? (r.tier_locked_until ? `, locked until ${day(r.tier_locked_until)}` : ', locked') : ''}.${
+          r.plan_change_invoice ? ` Invoice ${r.plan_change_invoice.invoice_number} for ${naira(r.plan_change_invoice.total_ngn)} issued.` : ''
+        }${body.notify_org && tier !== org.pricing_tier ? (r.notified ? ' The organisation has been emailed.' : ' The email to the organisation could not be sent.') : ''}`,
+    );
+  });
   $('#save-pricing-btn')?.addEventListener('click', () => {
     const raw = $('#pricing-custom-json').value.trim();
     let custom = null;
@@ -536,7 +590,6 @@ async function orgDetail(orgId, status) {
         api(`/api/v1/platform/orgs/${orgId}/pricing`, {
           method: 'PUT',
           body: JSON.stringify({
-            pricing_tier: $('#pricing-tier').value,
             billing_frequency: $('#pricing-frequency').value,
             projected_students_per_year: projected === '' ? null : Number(projected),
             is_enterprise_custom: $('#pricing-custom').checked,
@@ -545,7 +598,7 @@ async function orgDetail(orgId, status) {
           }),
         }),
       rerender,
-      'Pricing saved.',
+      'Settings saved.',
     );
   });
   $('#credit-form')?.addEventListener('submit', (e) => {

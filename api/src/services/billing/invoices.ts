@@ -13,7 +13,7 @@ export const PAYMENT_TERMS_DAYS = 7;
 // blocked until it's paid. Existing cohorts and learners are never affected.
 export const BLOCK_AFTER_OVERDUE_DAYS = 14;
 
-export type InvoiceKind = 'monthly_base' | 'cohort_cycle_base' | 'cohort_completion' | 'report_overage';
+export type InvoiceKind = 'monthly_base' | 'cohort_cycle_base' | 'cohort_completion' | 'report_overage' | 'plan_change';
 export type InvoiceLine = { category: 'base' | 'assessment' | 'report' | 'credit' | 'discount'; description: string; quantity: number; unit_ngn: number; amount_ngn: number };
 
 export async function createInvoice(opts: {

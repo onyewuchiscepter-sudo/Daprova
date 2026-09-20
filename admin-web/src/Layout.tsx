@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
 import { DaprovaMark } from './components/Logo';
 import Announcements from './components/Announcements';
+import { PlanBadge, PlanChangeNotice } from './components/PlanWatcher';
 
 const NAV = [
   { to: '/home', label: 'Home' },
@@ -71,13 +72,14 @@ export default function Layout() {
 
       <header className="bg-paper border-b border-rule">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-7 min-w-0">
+          <div className="flex items-center gap-7 shrink-0">
             <span className="inline-flex items-center gap-2 font-mono font-semibold text-[15px] tracking-[0.02em] text-ink shrink-0">
               <DaprovaMark size={22} />
               <span>
                 daprova<span className="text-gain">.</span>
               </span>
             </span>
+            <PlanBadge linkToBilling={user?.role === 'admin'} />
             <nav className="flex items-center gap-6">
               {NAV.filter((item) => !('adminOnly' in item) || user?.role === 'admin').map((item) => (
                 <NavLink
@@ -98,7 +100,7 @@ export default function Layout() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-4 text-sm min-w-0">
+          <div className="flex items-center justify-end gap-4 text-sm min-w-0 flex-1">
             {memberships.length > 1 ? (
               <select
                 value={org?.id ?? ''}
@@ -113,9 +115,9 @@ export default function Layout() {
                 ))}
               </select>
             ) : (
-              <span className="text-ink truncate">{org?.name}</span>
+              <span className="text-ink truncate min-w-0" title={org?.name}>{org?.name}</span>
             )}
-            <span className="text-ink-soft truncate hidden sm:inline" title={user?.email}>
+            <span className="text-ink-soft truncate min-w-0 hidden xl:inline" title={user?.email}>
               {user?.email}
             </span>
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-sage border border-rule rounded px-1.5 py-0.5 shrink-0">
@@ -128,6 +130,7 @@ export default function Layout() {
         </div>
       </header>
 
+      <PlanChangeNotice />
       <Announcements />
 
       <main className="max-w-6xl mx-auto px-6 py-8">

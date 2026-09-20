@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../db/index.js';
@@ -11,6 +12,7 @@ import * as insightsService from '../services/insightsService.js';
 import { orgLogoPath, parseBrandColor, parseLogoDataUrl } from '../lib/branding.js';
 import { sql } from 'kysely';
 import { activeAnnouncementsForOrg } from '../services/platformOpsService.js';
+import { getOrgPlan, isTierLocked } from '../services/billing/plan.js';
 
 export const orgRouter = Router();
 
@@ -63,8 +65,26 @@ orgRouter.get('/org', requireAuth, async (req, res, next) => {
   }
 });
 
-// GET /api/v1/org/memberships — every org the current signed-in person
-// belongs to, for the org-switcher UI (docs/org-onboarding-spec.md §2).
+// The org's current plan, for every member (not just admins). The app polls
+// this so a plan change made by Daprova shows up on an open dashboard within
+// seconds; `version` changes whenever the plan or its features do.
+orgRouter.get('/org/plan', requireAuth, async (req, res, next) => {
+  try {
+    if (!req.auth!.org_id) throw notFound('No organisation');
+    const { org, tier } = await getOrgPlan(req.auth!.org_id);
+    res.set('Cache-Control', 'no-store').json({
+      tier_id: tier.tier_id,
+      name: tier.display_name,
+      features: tier.features,
+      concurrent_cohorts_limit: tier.concurrent_cohorts_limit,
+      locked: isTierLocked(org),
+      version: crypto.createHash('sha1').update(JSON.stringify([org.pricing_tier, org.tier_effective_date, org.is_enterprise_custom, org.custom_pricing_json, tier.features])).digest('hex').slice(0, 16),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Notices from Daprova (platform console → Announcements) for this org.
 orgRouter.get('/org/announcements', requireAuth, async (req, res, next) => {
   try {
@@ -74,6 +94,8 @@ orgRouter.get('/org/announcements', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/v1/org/memberships — every org the current signed-in person
+// belongs to, for the org-switcher UI (docs/org-onboarding-spec.md §2).
 orgRouter.get('/org/memberships', requireAuth, async (req, res, next) => {
   try {
     const rows = await db

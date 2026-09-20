@@ -15,6 +15,7 @@ import {
   trailingStudents,
   type OrgBilling,
   type TierId,
+  isTierLocked,
 } from './plan.js';
 
 // Pricing & Billing Spec §3-§4, §7 — when cohorts may be created, what is
@@ -57,7 +58,7 @@ export async function assertCanCreateCohort(orgId: string) {
 
   // Enterprise is never self-serve: at 1,000+ learners a year (projected or
   // actual) new cohorts stop until sales has set up a custom plan.
-  if (!org.is_enterprise_custom) {
+  if (!org.is_enterprise_custom && !isTierLocked(org)) {
     const trailing = await trailingStudents(orgId);
     if (trailing >= ENTERPRISE_THRESHOLD || (org.projected_students_per_year ?? 0) >= ENTERPRISE_THRESHOLD) {
       throw contactSales(`You've reached ${Math.max(trailing, org.projected_students_per_year ?? 0).toLocaleString()} learners a year — programmes of 1,000+ are on our Enterprise plan. Contact sales to continue creating cohorts.`, {
@@ -167,7 +168,7 @@ export async function evaluateTier(org: OrgBilling, opts: { renewal: boolean }) 
   const trailing = await trailingStudents(org.id);
   const target = determineTier(trailing);
   const current = org.pricing_tier as TierId;
-  if (org.is_enterprise_custom || target === current) {
+  if (org.is_enterprise_custom || isTierLocked(org) || target === current) {
     if (org.pending_tier) await db.updateTable('organisations').set({ pending_tier: null }).where('id', '=', org.id).execute();
     return { changed: false, trailing, tier: current };
   }

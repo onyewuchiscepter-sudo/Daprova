@@ -110,6 +110,8 @@ export async function loadOrgBilling(orgId: string) {
       'billing_started_at',
       'current_period_start',
       'pending_tier',
+      'tier_locked',
+      'tier_locked_until',
     ])
     .where('id', '=', orgId)
     .executeTakeFirst();
@@ -118,6 +120,13 @@ export async function loadOrgBilling(orgId: string) {
 }
 
 export type OrgBilling = Awaited<ReturnType<typeof loadOrgBilling>>;
+
+// A plan set (and locked) by Daprova staff: automatic volume-based changes
+// and the Enterprise volume gate don't apply while the lock holds.
+export function isTierLocked(org: Pick<OrgBilling, 'tier_locked' | 'tier_locked_until'>) {
+  if (!org.tier_locked) return false;
+  return !org.tier_locked_until || new Date(org.tier_locked_until as unknown as string) > new Date();
+}
 
 // The org's effective tier config. Enterprise orgs with a negotiated deal
 // have their custom_pricing_json merged over the Enterprise defaults (§6);

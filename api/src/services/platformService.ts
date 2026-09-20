@@ -4,7 +4,10 @@ import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
-import { billingSummary, listInvoices, markInvoicePaid, runBillingCycle } from './billing/index.js';
+import { billingSummary, createInvoice, listInvoices, markInvoicePaid, runBillingCycle } from './billing/index.js';
+import { loadOrgBilling, orgTier, TIER_ORDER } from './billing/plan.js';
+import { emailConfigured, escapeHtml, sendEmails } from '../lib/messaging.js';
+import { env } from '../env.js';
 
 // Every org with the figures the console filters and sorts by.
 export async function listOrgs() {
@@ -22,6 +25,8 @@ export async function listOrgs() {
       'o.is_enterprise_custom',
       'o.billing_started_at',
       'o.credit_ngn',
+      'o.tier_locked',
+      'o.tier_locked_until',
       'o.created_at',
       'o.deleted_at',
       sql<number>`(select count(*) from org_memberships m where m.org_id = o.id and m.deleted_at is null)::int`.as('member_count'),
@@ -290,12 +295,24 @@ export async function setOrgPricing(
     projected_students_per_year?: number | null;
     is_enterprise_custom?: boolean;
     custom_pricing_json?: Record<string, unknown> | null;
+    // Keep this plan regardless of learner volume: indefinitely (until
+    // null) or until a date. locked=false hands the plan back to volume.
+    tier_lock?: { locked: boolean; until?: string | null };
+    // Upgrading mid-month (monthly billing, past the trial): invoice the
+    // base-fee difference for the rest of the current month now.
+    bill_difference_now?: boolean;
+    // Email the org's billing contact about the new plan.
+    notify_org?: boolean;
     reason: string;
   },
 ) {
   const org = await assertOrgExists(orgId);
+  const before = await loadOrgBilling(orgId);
+  const beforeTier = await orgTier(before);
+
   const patch: Record<string, unknown> = {};
-  if (opts.pricing_tier && opts.pricing_tier !== org.pricing_tier) {
+  const tierChanging = !!opts.pricing_tier && opts.pricing_tier !== org.pricing_tier;
+  if (tierChanging) {
     patch.pricing_tier = opts.pricing_tier;
     patch.tier_effective_date = sql`now()`;
     patch.pending_tier = null;
@@ -304,19 +321,86 @@ export async function setOrgPricing(
   if (opts.projected_students_per_year !== undefined) patch.projected_students_per_year = opts.projected_students_per_year;
   if (opts.is_enterprise_custom !== undefined) patch.is_enterprise_custom = opts.is_enterprise_custom;
   if (opts.custom_pricing_json !== undefined) patch.custom_pricing_json = opts.custom_pricing_json === null ? null : JSON.stringify(opts.custom_pricing_json);
-  // A negotiated Enterprise deal lifts the "contact sales" hold.
-  if (opts.is_enterprise_custom && org.billing_status === 'pending_manual_quote') patch.billing_status = 'active';
-  if (!Object.keys(patch).length) return org;
+  if (opts.tier_lock) {
+    if (opts.tier_lock.locked && opts.tier_lock.until && new Date(opts.tier_lock.until) <= new Date()) throw badRequest('The lock end date must be in the future.');
+    patch.tier_locked = opts.tier_lock.locked;
+    patch.tier_locked_until = opts.tier_lock.locked && opts.tier_lock.until ? new Date(opts.tier_lock.until) : null;
+    if (opts.tier_lock.locked) patch.pending_tier = null;
+  }
+  // A negotiated Enterprise deal, or a plan Daprova has locked, lifts the
+  // "contact sales" hold.
+  if (org.billing_status === 'pending_manual_quote' && (opts.is_enterprise_custom || opts.tier_lock?.locked)) patch.billing_status = 'active';
+  if (!Object.keys(patch).length) return { ...org, plan_change_invoice: null, notified: false };
 
   const updated = await db.updateTable('organisations').set(patch).where('id', '=', orgId).returningAll().executeTakeFirstOrThrow();
+  const after = await loadOrgBilling(orgId);
+  const afterTier = await orgTier(after);
+
+  // Pro-rated difference for the rest of this month, on request.
+  let planChangeInvoice: { id: string; invoice_number: string; total_ngn: string } | null = null;
+  if (opts.bill_difference_now && tierChanging) {
+    const oldFee = beforeTier.base_fee_monthly_ngn;
+    const newFee = afterTier.base_fee_monthly_ngn;
+    const periodStart = after.current_period_start ? new Date(after.current_period_start as unknown as string) : null;
+    if (after.billing_frequency !== 'monthly' || !after.billing_started_at || !periodStart) {
+      throw badRequest('The plan was changed, but no difference was billed: that only applies to monthly-billed organisations past their free trial.');
+    }
+    if (oldFee === null || newFee === null || newFee <= oldFee) {
+      throw badRequest('The plan was changed, but no difference was billed: the new base fee is not higher than the old one.');
+    }
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+    const now = new Date();
+    const fraction = Math.max(0, Math.min(1, (periodEnd.getTime() - now.getTime()) / (periodEnd.getTime() - periodStart.getTime())));
+    const days = Math.ceil((periodEnd.getTime() - now.getTime()) / 86400000);
+    const amount = Math.round((newFee - oldFee) * fraction);
+    if (amount > 0) {
+      const inv = await createInvoice({
+        org: after,
+        tier: afterTier,
+        kind: 'plan_change',
+        periodStart: now,
+        periodEnd,
+        lines: [
+          {
+            category: 'base',
+            description: `Plan change ${beforeTier.display_name} → ${afterTier.display_name}: base-fee difference for the rest of this month (${days} day${days === 1 ? '' : 's'})`,
+            quantity: 1,
+            unit_ngn: amount,
+            amount_ngn: amount,
+          },
+        ],
+        notes: opts.reason,
+      });
+      planChangeInvoice = { id: inv.id, invoice_number: inv.invoice_number, total_ngn: inv.total_ngn };
+    }
+  }
+
+  let notified = false;
+  if (opts.notify_org && tierChanging && emailConfigured()) {
+    const up = TIER_ORDER.indexOf(afterTier.tier_id) > TIER_ORDER.indexOf(beforeTier.tier_id);
+    const text = `Hello,\n\nThe Daprova team has moved ${org.name} from the ${beforeTier.display_name} plan to the ${afterTier.display_name} plan.${
+      up ? ' The features of the new plan are available now.' : ''
+    }${planChangeInvoice ? ` Invoice ${planChangeInvoice.invoice_number} covers the difference in base fee for the rest of this month.` : ' The new base fee applies from your next billing cycle.'}\n\nYou can see your plan and invoices here: ${env.adminDashboardOrigin}/billing\n\nDaprova`;
+    const [result] = await sendEmails([
+      { to: org.contact_email, subject: `Your Daprova plan is now ${afterTier.display_name}`, text, html: text.split('\n\n').map((p) => `<p>${escapeHtml(p)}</p>`).join('') },
+    ]);
+    notified = result?.ok === true;
+  }
+
   await writeAuditLog({
     actorPersonId,
     actorContext: 'platform_admin',
     orgId,
     action: 'pricing_updated',
-    details: { before: { pricing_tier: org.pricing_tier, billing_frequency: org.billing_frequency, is_enterprise_custom: org.is_enterprise_custom }, changes: opts },
+    details: {
+      before: { pricing_tier: org.pricing_tier, billing_frequency: org.billing_frequency, is_enterprise_custom: org.is_enterprise_custom, tier_locked: org.tier_locked, tier_locked_until: org.tier_locked_until },
+      changes: opts,
+      plan_change_invoice: planChangeInvoice?.invoice_number ?? null,
+      notified,
+    },
   });
-  return updated;
+  return { ...updated, plan_change_invoice: planChangeInvoice, notified };
 }
 
 // Offline payment (bank transfer) or a goodwill write-off of an invoice.

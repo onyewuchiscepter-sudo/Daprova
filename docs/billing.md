@@ -47,7 +47,8 @@ Reaching 1,000+ learners (or projecting that many at signup) puts the org on
 custom Enterprise agreement.
 
 A plan set by hand in the platform console holds until the next renewal. It
-then follows volume again, unless the org is on a custom Enterprise agreement.
+then follows volume again, unless it was locked (see "Changing an org's
+plan" below) or the org is on a custom Enterprise agreement.
 
 ## Jobs
 
@@ -95,6 +96,20 @@ Sign in at the platform site. The tabs:
 verify orgs, review fraud flags, impersonate (read-only), send invoice
 reminders, password resets and invite re-sends. Support can't create orgs or
 change money, plans, account status, members or staff.
+
+**Changing an org's plan** (org page, Plan & pricing, then Change plan; owners only):
+pick the plan, then optionally:
+- **Keep this plan whatever their learner numbers do.** This locks the plan,
+  indefinitely or until a date. While locked, the automatic change at renewal
+  and the 1,000+ learner Enterprise hold don't apply. Untick it to hand the
+  plan back to their learner numbers from the next renewal.
+- **Invoice the base-fee difference for the rest of this month.** This applies to
+  upgrades on monthly billing after the free trial. A `plan_change` invoice
+  is issued now, pro-rated to the days left in the month.
+- **Email the organisation** that their plan changed.
+
+Features change the moment the plan is saved. Without a lock, a manual plan change
+lasts until the next renewal, when the plan follows their learner numbers again.
 
 **Reasons.** Suspending, reactivating, closing, reopening or banning an org,
 granting a free cohort, changing billing status or pricing, and marking an

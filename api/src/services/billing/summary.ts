@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { blockingInvoice, BLOCK_AFTER_OVERDUE_DAYS } from './invoices.js';
 import { AUTO_FINALIZE_AFTER_DAYS } from './lifecycle.js';
-import { FREE_TRIAL_LEARNERS, determineTier, loadOrgBilling, orgTier, tiersForVersion, trailingStudents, ENTERPRISE_THRESHOLD } from './plan.js';
+import { FREE_TRIAL_LEARNERS, determineTier, loadOrgBilling, orgTier, tiersForVersion, trailingStudents, ENTERPRISE_THRESHOLD, isTierLocked } from './plan.js';
 import { quotaStatus } from './quota.js';
 
 // Everything the org's Billing page shows, in one call.
@@ -38,7 +38,9 @@ export async function billingSummary(orgId: string) {
     is_enterprise_custom: org.is_enterprise_custom,
     tier,
     tier_effective_date: org.tier_effective_date,
-    pending_tier: org.pending_tier,
+    pending_tier: isTierLocked(org) ? null : org.pending_tier,
+    // Set by Daprova rather than by volume (see isTierLocked).
+    tier_lock: isTierLocked(org) ? { until: org.tier_locked_until } : null,
     volume: {
       trailing_12_months: trailing,
       tier_by_volume: byVolume,
