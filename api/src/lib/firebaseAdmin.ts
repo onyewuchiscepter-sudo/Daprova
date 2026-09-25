@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
 import { env } from '../env.js';
 
 // Two verification paths, switched by whether FIREBASE_AUTH_EMULATOR_HOST is
@@ -33,15 +33,73 @@ async function callIdentityToolkit<T>(path: string, body: unknown): Promise<T> {
   return json;
 }
 
-// Google's published JWKS for Firebase ID tokens — cached and auto-refreshed by jose.
-const googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
+// Google's published signing keys for Firebase ID tokens.
+//
+// Deliberately fetched here rather than via jose's createRemoteJWKSet: that
+// keeps a shared in-flight fetch on the module object, and on Workers a
+// promise created by one request can't be awaited by another ("Cannot
+// perform I/O on behalf of a different request"), which would fail sign-ins
+// at random. Only the parsed keys — plain JSON — are cached across requests.
+const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+const JWKS_TTL_MS = 60 * 60 * 1000;
+let cachedJwks: { keys: JSONWebKeySet; fetchedAt: number } | null = null;
+
+async function fetchJwks(): Promise<JSONWebKeySet> {
+  let res: Response;
+  try {
+    res = await fetch(JWKS_URL);
+  } catch (err) {
+    throw new TokenCheckError('JWKS_FETCH_FAILED', `Could not reach Google's key server: ${(err as Error).message}`);
+  }
+  if (!res.ok) throw new TokenCheckError('JWKS_FETCH_FAILED', `Google's key server answered ${res.status}`);
+  const keys = (await res.json()) as JSONWebKeySet;
+  if (!keys?.keys?.length) throw new TokenCheckError('JWKS_EMPTY', "Google's key server returned no keys");
+  cachedJwks = { keys, fetchedAt: Date.now() };
+  return keys;
+}
+
+// Carries a short code so a rejected sign-in can say why without ever
+// exposing the token itself.
+export class TokenCheckError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 async function verifyRealIdToken(idToken: string): Promise<{ uid: string; email?: string }> {
-  const { payload } = await jwtVerify(idToken, googleJwks, {
-    issuer: `https://securetoken.google.com/${env.firebaseProjectId}`,
-    audience: env.firebaseProjectId,
-  });
-  if (!payload.sub) throw new Error('ID token missing sub claim');
+  const fresh = cachedJwks && Date.now() - cachedJwks.fetchedAt < JWKS_TTL_MS;
+  let keys = fresh ? cachedJwks!.keys : await fetchJwks();
+
+  const verify = async () =>
+    jwtVerify(idToken, createLocalJWKSet(keys), {
+      issuer: `https://securetoken.google.com/${env.firebaseProjectId}`,
+      audience: env.firebaseProjectId,
+      // Google rotates these keys; a little slack avoids rejecting a token
+      // that is valid either side of a clock difference.
+      clockTolerance: 60,
+    });
+
+  let payload;
+  try {
+    ({ payload } = await verify());
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? 'ERR_JWT_INVALID';
+    // Signed with a key we don't have yet (Google rotates them): refresh once.
+    if (code === 'ERR_JWKS_NO_MATCHING_KEY' && fresh) {
+      keys = await fetchJwks();
+      try {
+        ({ payload } = await verify());
+      } catch (retryErr) {
+        throw new TokenCheckError((retryErr as { code?: string }).code ?? 'ERR_JWT_INVALID', (retryErr as Error).message);
+      }
+    } else {
+      throw new TokenCheckError(code, (err as Error).message);
+    }
+  }
+  if (!payload.sub) throw new TokenCheckError('ERR_JWT_NO_SUB', 'ID token has no subject claim');
   return { uid: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined };
 }
 
@@ -64,10 +122,6 @@ export const firebaseAuth = {
     return { uid: data.localId };
   },
 
-  // Used by the dev seed script (against the emulator) and by Model B's
-  // team-provisioned org creation (routes/platform.ts, against a real
-  // project) — the same public signUp REST call either way, just a
-  // different key/base URL depending on which `callIdentityToolkit` picks.
   // Firebase emails the person a link to choose their own password. Used by
   // the platform console to set up staff logins and to help a customer who
   // is locked out, so nobody at Daprova ever handles a password.
@@ -75,6 +129,10 @@ export const firebaseAuth = {
     await callIdentityToolkit('/accounts:sendOobCode', { requestType: 'PASSWORD_RESET', email });
   },
 
+  // Used by the dev seed script (against the emulator) and by Model B's
+  // team-provisioned org creation (routes/platform.ts, against a real
+  // project) — the same public signUp REST call either way, just a
+  // different key/base URL depending on which `callIdentityToolkit` picks.
   async createUser(opts: { email: string; password: string; emailVerified?: boolean }): Promise<{ uid: string }> {
     const data = await callIdentityToolkit<{ localId: string }>('/accounts:signUp', {
       email: opts.email,

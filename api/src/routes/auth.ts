@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { firebaseAuth } from '../lib/firebaseAdmin.js';
+import { firebaseAuth, TokenCheckError } from '../lib/firebaseAdmin.js';
 import { requireAuth } from '../middleware/auth.js';
 import { unauthorized, notFound, badRequest, forbidden } from '../lib/errors.js';
 import { signOrgSelectionToken, verifyOrgSelectionToken, verifyRefreshToken, signSessionToken } from '../lib/sessionTokens.js';
@@ -33,9 +33,12 @@ authRouter.post('/verify', async (req, res, next) => {
     const idToken = header.slice('Bearer '.length);
 
     const decoded = await firebaseAuth.verifyIdToken(idToken).catch((err: unknown) => {
-      // The reason (expired, wrong audience, key fetch failed, ...) — never the token itself.
-      console.warn('[auth/verify] Firebase ID token rejected:', (err as { code?: string })?.code ?? (err as Error)?.message ?? err);
-      throw unauthorized('Invalid Firebase ID token');
+      // The reason (expired, wrong audience, key fetch failed, ...) — never the
+      // token itself. It goes in the message too, so a rejected sign-in can be
+      // diagnosed from the browser without reading the server log.
+      const code = err instanceof TokenCheckError ? err.code : ((err as { code?: string })?.code ?? 'UNKNOWN');
+      console.warn('[auth/verify] Firebase ID token rejected:', code, (err as Error)?.message ?? err);
+      throw unauthorized(`Invalid Firebase ID token (${code})`, { reason: code });
     });
 
     const person = await db
