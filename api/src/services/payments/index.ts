@@ -9,18 +9,21 @@ const PROVIDERS: Record<ProviderName, PaymentProvider> = { paystack, flutterwave
 // The provider new checkouts go to. An explicit PAYMENT_PROVIDER wins, and
 // fails loudly if its key is missing rather than silently taking money
 // through a different gateway; otherwise the first configured real
-// provider, else the stub.
+// provider, else the stub (outside production only).
 export function activeProvider(): PaymentProvider {
   const chosen = env.paymentProvider as ProviderName | undefined;
   if (chosen) {
     const provider = PROVIDERS[chosen];
     if (!provider) throw new Error(`Unknown PAYMENT_PROVIDER "${chosen}"`);
-    if (!provider.isConfigured()) throw new Error(`PAYMENT_PROVIDER is "${chosen}" but its secret key is not set`);
+    if (!provider.isConfigured()) {
+      throw new Error(chosen === 'stub' ? 'The test checkout is disabled in production' : `PAYMENT_PROVIDER is "${chosen}" but its secret key is not set`);
+    }
     return provider;
   }
   if (paystack.isConfigured()) return paystack;
   if (flutterwave.isConfigured()) return flutterwave;
-  return stub;
+  if (stub.isConfigured()) return stub;
+  throw new Error('No payment gateway is configured: set PAYSTACK_SECRET_KEY');
 }
 
 // An existing payment is always checked with the provider it was opened
@@ -42,6 +45,8 @@ export function providerStatus() {
   return {
     active,
     paystack_configured: paystack.isConfigured(),
+    // From the key's prefix, so a test key left in production is visible.
+    paystack_mode: env.paystackSecretKey?.startsWith('sk_live_') ? 'live' : env.paystackSecretKey?.startsWith('sk_test_') ? 'test' : null,
     flutterwave_configured: flutterwave.isConfigured(),
     flutterwave_webhook_hash_configured: !!env.flutterwaveWebhookHash,
   };

@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { db } from '../../db/index.js';
+import { env } from '../../env.js';
 import { notFound } from '../../lib/errors.js';
 import type { PaymentProvider } from './types.js';
 
@@ -7,9 +8,11 @@ import type { PaymentProvider } from './types.js';
 // side" state lives in its own table, deliberately separate from our
 // payments table, so the webhook-less reconciliation path gets exercised the
 // same way it does for a real provider.
+// Never available in production: its checkout page is public and lets anyone
+// "pay" an invoice, so production refuses checkouts until a real key is set.
 export const stub: PaymentProvider = {
   name: 'stub',
-  isConfigured: () => true,
+  isConfigured: () => env.nodeEnv !== 'production',
 
   async initialize(req) {
     await db.insertInto('payment_stub_state').values({ reference: req.reference }).execute();

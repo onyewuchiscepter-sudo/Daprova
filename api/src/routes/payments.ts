@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { env } from '../env.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import * as paymentService from '../services/paymentService.js';
-import { simulateStubOutcome } from '../services/payments/stub.js';
+import { simulateStubOutcome, stub } from '../services/payments/stub.js';
 
 export const paymentsRouter = Router();
 
@@ -31,9 +31,11 @@ paymentsRouter.post('/:reference/verify', requireAuth, requireRole('admin'), asy
 });
 
 // Public — the stub provider's stand-in for a Paystack/Flutterwave-hosted
-// checkout page. Only used while no real provider keys are configured.
+// checkout page. Only used while no real provider keys are configured, and
+// never in production.
 paymentsRouter.get('/stub-checkout/:reference', async (req, res, next) => {
   try {
+    if (!stub.isConfigured()) throw notFound('Not found');
     const { payment, label } = await paymentService.getStubCheckoutInfo(req.params.reference);
     // Same return trip a real gateway makes after checkout.
     const returnUrl = `${env.adminDashboardOrigin}/billing?payment=${payment.reference}`;
@@ -73,6 +75,7 @@ paymentsRouter.get('/stub-checkout/:reference', async (req, res, next) => {
 const simulateSchema = z.object({ outcome: z.enum(['success', 'failed']) });
 paymentsRouter.post('/stub-checkout/:reference/simulate', async (req, res, next) => {
   try {
+    if (!stub.isConfigured()) throw notFound('Not found');
     const body = simulateSchema.safeParse(req.body);
     if (!body.success) throw badRequest('Invalid request body', body.error.flatten());
     // Only updates the stub provider's own state, not our payments row —

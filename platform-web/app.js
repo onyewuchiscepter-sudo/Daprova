@@ -733,7 +733,7 @@ async function paymentsTab(status) {
     ${flash(status)}
     <div class="card">
       <p><strong>New checkouts use:</strong> ${esc(providers.active)}${providers.active === 'stub' ? ' <span class="muted">(test mode — no real money moves; add PAYSTACK_SECRET_KEY or FLUTTERWAVE_SECRET_KEY as API secrets to go live)</span>' : ''}</p>
-      <p class="muted">Paystack: ${yesNo(providers.paystack_configured)} · Flutterwave: ${yesNo(providers.flutterwave_configured)} (webhook hash: ${yesNo(providers.flutterwave_webhook_hash_configured)})</p>
+      <p class="muted">Paystack: ${yesNo(providers.paystack_configured)}${providers.paystack_mode ? ` (${esc(providers.paystack_mode)} key)` : ''} · Flutterwave: ${yesNo(providers.flutterwave_configured)} (webhook hash: ${yesNo(providers.flutterwave_webhook_hash_configured)})</p>
       <button class="secondary" id="reconcile-btn">Check pending payments now</button>
       <span class="muted">Runs every minute on its own: asks the gateway about each pending checkout and expires abandoned ones.</span>
     </div>

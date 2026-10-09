@@ -25,7 +25,13 @@ export async function startInvoicePayment(orgId: string, invoiceId: string) {
   if (existing?.checkout_url) return { payment: existing, checkoutUrl: existing.checkout_url };
 
   const org = await db.selectFrom('organisations').select(['contact_email', 'name']).where('id', '=', orgId).executeTakeFirstOrThrow();
-  const provider = activeProvider();
+  let provider: ReturnType<typeof activeProvider>;
+  try {
+    provider = activeProvider();
+  } catch (err) {
+    console.error('[payments]', (err as Error).message);
+    throw badRequest('Online payment is not available right now. Please contact Daprova to pay this invoice.');
+  }
   const reference = `dpv_${crypto.randomUUID().replace(/-/g, '')}`;
   const amount = Number(invoice.total_ngn);
 

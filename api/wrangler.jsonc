@@ -29,7 +29,7 @@
   "observability": { "enabled": true },
 
   // Non-secret config. Secrets (SESSION_JWT_SECRET, REFRESH_JWT_SECRET,
-  // FIREBASE_API_KEY, RESEND_API_KEY, BOOTSTRAP_SECRET) are set with
+  // FIREBASE_API_KEY, RESEND_API_KEY, BOOTSTRAP_SECRET, PAYSTACK_SECRET_KEY) are set with
   // `npx wrangler secret put <NAME>`, never here.
   "vars": {
     "NODE_ENV": "production",
