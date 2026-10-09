@@ -56,6 +56,15 @@ cohortsRouter.patch('/:id', async (req, res, next) => {
   }
 });
 
+// Withdraw a cohort that was never paid for (per-cohort billing).
+cohortsRouter.post('/:id/cancel-unpaid', async (req, res, next) => {
+  try {
+    res.json(await billing.cancelUnpaidCohort(req.auth!.org_id!, req.params.id, req.auth!.sub));
+  } catch (err) {
+    next(err);
+  }
+});
+
 cohortsRouter.get('/:id/learners', async (req, res, next) => {
   try {
     res.json(await cohortService.listCohortLearners(req.auth!.org_id!, req.params.id));

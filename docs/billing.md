@@ -22,7 +22,9 @@ analytics level) are in the tier's `features` JSON. The API enforces them
 ## How money is charged
 
 - **Base fee**: monthly orgs get one invoice per month from `billing_started_at`.
-  Per-cohort-cycle orgs get one when each cohort is created.
+  Per-cohort-cycle orgs pay when each cohort is created: the cohort is held
+  (its assessment links don't work) until the fee is paid. The admin can pay
+  from the cohort page or Billing, or cancel the unpaid cohort.
 - **Assessment fee**: charged when a cohort is **finalised**, for each learner
   who completed both pre and post, at the tier in effect then. Admins finalise
   from the cohort page; the hourly job auto-finalises 14 days after `end_date`.
@@ -34,6 +36,41 @@ analytics level) are in the tier's `features` JSON. The API enforces them
   second cohort is created. Platform admins can grant more free cohorts.
 - Invoices are due in 7 days. Once one is **14 days overdue**, new cohorts and
   new funder reports are blocked until it's paid. Running cohorts are not affected.
+
+## Choosing a plan (org admins)
+
+The Billing page has a **Choose a plan** / **Change your plan** section: pick
+Starter, Growth or Scale and **Pay monthly** or **Pay per cohort**. Before
+confirming, the admin sees what will happen and what it costs now.
+
+| Situation | What happens |
+|---|---|
+| Free trial, monthly | Pay the first month now (Paystack). The trial ends when paid; the month starts then. |
+| Free trial, per cohort | Applies at once, nothing to pay. The trial ends; each new cohort is paid when created. |
+| Upgrade, monthly | Pay the pro-rated base-fee difference for the rest of the month; the plan changes when paid. |
+| Upgrade, per cohort | Pay the cycle-fee difference for each running paid cohort (nothing if none); the plan changes when paid. |
+| Downgrade | Free. Applies at the next renewal (per cohort: once no paid cohort is running). |
+| Monthly → per cohort | At the next renewal; no further monthly invoices. |
+| Per cohort → monthly | Nothing running: pay the first month now. Otherwise once the running cohorts are finalised, with a normal monthly invoice. |
+
+The trial cohort stays free whichever way the trial ends.
+
+**The chosen plan is a floor.** At renewal the plan is the higher of the one
+the org chose and the one its learner numbers need, so volume can move them
+up but never below their choice. They can't choose a plan below what their
+learner numbers need. Choosing the current plan again cancels a scheduled
+downgrade or switch.
+
+**Not self-serve:** Enterprise, plans locked by Daprova, and orgs waiting
+for an Enterprise quote see "contact us" instead.
+
+**How it works.** Anything paid now is an invoice with an `on_paid` action
+(start a plan, upgrade, open a cohort), applied only once the invoice is
+paid: through Paystack, "Mark paid" in the console, or a discount to ₦0.
+These invoices never go overdue or block anything. An unpaid plan offer is
+replaced by a newer choice and withdrawn after 3 days. The every-minute
+payments job re-applies any paid action that didn't apply. Code:
+`api/src/services/billing/selfServe.ts`.
 
 ## Tier changes
 

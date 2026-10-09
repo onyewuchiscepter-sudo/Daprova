@@ -4,6 +4,7 @@ import { AppError, badRequest, forbidden, notFound } from '../../lib/errors.js';
 import { writeAuditLog } from '../../lib/auditLog.js';
 import { emailConfigured, escapeHtml, sendEmails } from '../../lib/messaging.js';
 import { createInvoice, markOverdueInvoices, assertNotBlocked } from './invoices.js';
+import { expireStalePlanOffers, floorTier } from './selfServe.js';
 import {
   ENTERPRISE_THRESHOLD,
   FREE_TRIAL_LEARNERS,
@@ -120,7 +121,7 @@ async function issueMonthlyInvoice(org: OrgBilling, periodStart: Date) {
 
 // Called right after a cohort row is created. The org's first cohort is its
 // free trial; otherwise billing is running, and per-cohort-cycle orgs pay the
-// cycle base fee upfront.
+// cycle base fee before the cohort opens to learners.
 export async function onCohortCreated(orgId: string, cohortId: string) {
   const free = await db.transaction().execute(async (trx) => {
     const org = await trx.selectFrom('organisations').select(['free_cohorts_remaining']).where('id', '=', orgId).forUpdate().executeTakeFirstOrThrow();
@@ -137,7 +138,7 @@ export async function onCohortCreated(orgId: string, cohortId: string) {
     const tier = await orgTier(org);
     if (tier.base_fee_per_cohort_cycle_ngn !== null) {
       const now = new Date();
-      await createInvoice({
+      const invoice = await createInvoice({
         org,
         tier,
         kind: 'cohort_cycle_base',
@@ -153,7 +154,14 @@ export async function onCohortCreated(orgId: string, cohortId: string) {
             amount_ngn: tier.base_fee_per_cohort_cycle_ngn,
           },
         ],
+        onPaid: { type: 'open_cohort', cohort_id: cohortId },
       });
+      // Closed to learners until paid (unless account credit already covered it).
+      if (invoice.status !== 'paid') {
+        await db.updateTable('cohorts').set({ awaiting_payment: true }).where('id', '=', cohortId).execute();
+        return { free_trial: false, payment_required: { invoice_id: invoice.id, invoice_number: invoice.invoice_number, total_ngn: Number(invoice.total_ngn) } };
+      }
+      await db.updateTable('invoices').set({ on_paid_applied_at: sql`now()` }).where('id', '=', invoice.id).execute();
     }
   }
   return { free_trial: false };
@@ -166,7 +174,8 @@ export async function onCohortCreated(orgId: string, cohortId: string) {
 // never applied automatically: the cohort-creation gate routes to sales.
 export async function evaluateTier(org: OrgBilling, opts: { renewal: boolean }) {
   const trailing = await trailingStudents(org.id);
-  const target = determineTier(trailing);
+  // A plan the org chose is a floor: volume can move them up, not below it.
+  const target = floorTier(determineTier(trailing), org.chosen_tier);
   const current = org.pricing_tier as TierId;
   if (org.is_enterprise_custom || isTierLocked(org) || target === current) {
     if (org.pending_tier) await db.updateTable('organisations').set({ pending_tier: null }).where('id', '=', org.id).execute();
@@ -265,6 +274,17 @@ export async function finalizeCohort(orgId: string, cohortId: string, actorPerso
   // to the next cycle's base fee).
   if (org.billing_frequency === 'per_cohort_cycle' && (org.billing_started_at || cohort.is_free_trial)) {
     await evaluateTier(await loadOrgBilling(orgId), { renewal: true });
+    // A switch to monthly the org chose waits until no paid cohort is running.
+    if (org.pending_billing_frequency === 'monthly' && (await openCohortCount(orgId)) === 0) {
+      const now = new Date();
+      await db
+        .updateTable('organisations')
+        .set({ billing_frequency: 'monthly', pending_billing_frequency: null, current_period_start: now, billing_started_at: org.billing_started_at ?? now })
+        .where('id', '=', orgId)
+        .execute();
+      await issueMonthlyInvoice(await loadOrgBilling(orgId), now);
+      await writeAuditLog({ actorPersonId: null, actorContext: 'system', orgId, action: 'billing_frequency_changed', details: { to: 'monthly' } });
+    }
   }
   return { invoice, learners_completed: pairs, learners_waived: waived, learners_billed: billable, fee_per_learner_ngn: fee };
 }
@@ -297,8 +317,9 @@ export async function finalizePreview(orgId: string, cohortId: string) {
 // Hourly job: overdue invoices, monthly cycle boundaries (tier re-evaluation
 // + next base-fee invoice) and auto-finalising cohorts past their window.
 export async function runBillingCycle() {
-  const summary = { overdue_marked: 0, periods_rolled: 0, tier_changes: 0, cohorts_finalized: 0, errors: 0 };
+  const summary = { overdue_marked: 0, plan_offers_withdrawn: 0, periods_rolled: 0, tier_changes: 0, cohorts_finalized: 0, errors: 0 };
   summary.overdue_marked = await markOverdueInvoices();
+  summary.plan_offers_withdrawn = await expireStalePlanOffers();
 
   const due = await db
     .selectFrom('organisations')
@@ -319,6 +340,14 @@ export async function runBillingCycle() {
         if (next > new Date()) break;
         const result = await evaluateTier(org, { renewal: true });
         if (result.changed) summary.tier_changes++;
+        // A switch to per-cohort billing the org chose takes effect at renewal:
+        // no further monthly invoices.
+        if (org.pending_billing_frequency === 'per_cohort_cycle') {
+          await db.updateTable('organisations').set({ billing_frequency: 'per_cohort_cycle', pending_billing_frequency: null, current_period_start: next }).where('id', '=', id).execute();
+          await writeAuditLog({ actorPersonId: null, actorContext: 'system', orgId: id, action: 'billing_frequency_changed', details: { to: 'per_cohort_cycle' } });
+          summary.periods_rolled++;
+          break;
+        }
         await db.updateTable('organisations').set({ current_period_start: next }).where('id', '=', id).execute();
         await issueMonthlyInvoice(await loadOrgBilling(id), next);
         summary.periods_rolled++;
@@ -336,6 +365,7 @@ export async function runBillingCycle() {
     .where('cohorts.finalized_at', 'is', null)
     .where('cohorts.deleted_at', 'is', null)
     .where('cohorts.end_date', 'is not', null)
+    .where('cohorts.awaiting_payment', '=', false)
     .where(sql<boolean>`cohorts.end_date + make_interval(days => ${AUTO_FINALIZE_AFTER_DAYS}) < now()`)
     .execute();
   for (const c of stale) {

@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { db } from '../../db/index.js';
 import { AppError, notFound } from '../../lib/errors.js';
 import type { OrgBilling, TierConfig } from './plan.js';
+import type { InvoiceAction } from './selfServe.js';
 
 // §6 invoices. Every charge (monthly base fee, per-cohort-cycle base fee,
 // assessment fees at cohort completion, extra funder reports) is one invoice
@@ -25,6 +26,9 @@ export async function createInvoice(opts: {
   periodEnd: Date;
   lines: InvoiceLine[];
   notes?: string;
+  // Applied once the invoice is paid (selfServe.ts). Makes it an offer: it
+  // never goes overdue or blocks anything.
+  onPaid?: InvoiceAction;
 }) {
   const lines = [...opts.lines];
   // Account credit (granted by Daprova staff) is used up before anything is
@@ -76,6 +80,7 @@ export async function createInvoice(opts: {
       paid_at: total > 0 ? null : new Date(),
       due_date: due,
       notes: opts.notes ?? null,
+      on_paid: opts.onPaid ? JSON.stringify(opts.onPaid) : null,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
@@ -102,6 +107,7 @@ const INVOICE_COLUMNS = [
   'due_date',
   'paid_at',
   'notes',
+  'on_paid',
   'created_at',
 ] as const;
 
@@ -138,6 +144,7 @@ export async function markOverdueInvoices() {
     .updateTable('invoices')
     .set({ status: 'overdue' })
     .where('status', '=', 'pending')
+    .where('on_paid', 'is', null)
     .where('due_date', '<', sql<Date>`now()`)
     .where('deleted_at', 'is', null)
     .returning('id')
@@ -152,6 +159,7 @@ export async function blockingInvoice(orgId: string) {
     .where('org_id', '=', orgId)
     .where('status', 'in', ['pending', 'overdue'])
     .where('deleted_at', 'is', null)
+    .where('on_paid', 'is', null)
     .where('due_date', '<', sql<Date>`now() - make_interval(days => ${BLOCK_AFTER_OVERDUE_DAYS})`)
     .orderBy('due_date')
     .executeTakeFirst();

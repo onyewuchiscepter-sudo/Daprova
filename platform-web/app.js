@@ -372,7 +372,9 @@ async function orgDetail(orgId, status) {
       <p><strong>${esc(b.tier.display_name)}</strong>${org.is_enterprise_custom ? ' (custom agreement)' : ''} since ${esc(day(b.tier_effective_date))} · billed ${esc(b.billing_frequency === 'monthly' ? 'monthly' : 'per cohort')} · pricing ${esc(b.pricing_version)}
         ${b.tier_lock ? ` · ${badge(b.tier_lock.until ? `locked until ${day(b.tier_lock.until)}` : 'locked', 'pending')}` : ''}</p>
       <p>Learners in the last 12 months: <strong>${esc(b.volume.trailing_12_months)}</strong> (fits ${esc(TIER_LABEL[b.volume.tier_by_volume])}) · projected ${esc(b.volume.projected ?? '—')} / year
-        ${b.pending_tier ? ` · <strong>moves to ${esc(TIER_LABEL[b.pending_tier])} at renewal</strong>` : ''}</p>
+        ${b.pending_tier ? ` · <strong>moves to ${esc(TIER_LABEL[b.pending_tier])} at renewal</strong>` : ''}${
+          b.chosen_tier ? ` · chosen by the org: ${esc(TIER_LABEL[b.chosen_tier] ?? b.chosen_tier)}` : ''
+        }${b.pending_billing_frequency ? ` · <strong>switching to ${b.pending_billing_frequency === 'monthly' ? 'monthly' : 'per-cohort'} billing</strong>` : ''}</p>
       <p>Open cohorts ${esc(b.cohorts.open)} / ${esc(b.cohorts.limit ?? '∞')} · reports this year ${esc(b.quota.used)} / ${esc(b.quota.included ?? '∞')} ·
         ${b.trial.active ? `free trial (${esc(org.free_cohorts_remaining)} free cohort(s) left)` : `billing since ${esc(day(org.billing_started_at))}`}
         ${b.blocked ? ` · <span class="bad">blocked by ${esc(b.blocked.invoice_number)}</span>` : ''}</p>

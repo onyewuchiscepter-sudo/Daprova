@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { sql } from 'kysely';
 import { db } from '../db/index.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors.js';
 import { lockCourseIfNeeded } from './frameworkService.js';
 import { evaluateSubmission } from './dataQualityService.js';
 import { brandingForCohortId } from '../lib/branding.js';
@@ -15,6 +15,8 @@ async function resolveCohortByToken(cohortToken: string) {
     .where('deleted_at', 'is', null)
     .executeTakeFirst();
   if (!cohort) throw notFound('Assessment link not found or has been invalidated');
+  // A per-cohort org's cohort opens once its fee is paid.
+  if (cohort.awaiting_payment) throw new AppError(403, 'COHORT_NOT_OPEN', "This assessment isn't open yet. Please check back later or ask your programme team.");
 
   const sessionType: 'pre' | 'post' = cohort.pre_link_token === cohortToken ? 'pre' : 'post';
   return { cohort, sessionType };

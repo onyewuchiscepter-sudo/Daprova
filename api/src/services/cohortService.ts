@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import { assertCanCreateCohort, getOrgPlan, onCohortCreated } from './billing/index.js';
+import { assertCanCreateCohort, cohortPaymentInvoice, getOrgPlan, onCohortCreated } from './billing/index.js';
 import * as frameworkService from './frameworkService.js';
 
 // Three ways to create a course, matching the Framework -> Course hierarchy
@@ -81,9 +81,15 @@ export async function createCohort(
     .executeTakeFirstOrThrow();
 
   // The org's first cohort is its free trial; otherwise this may start
-  // billing and (per-cohort-cycle orgs) invoice the cycle's base fee.
-  const { free_trial } = await onCohortCreated(orgId, cohort.id);
-  return { ...cohort, is_free_trial: free_trial };
+  // billing, and per-cohort-cycle orgs pay the cycle's base fee before the
+  // cohort opens (payment_required: the invoice to pay).
+  const created = await onCohortCreated(orgId, cohort.id);
+  return {
+    ...cohort,
+    is_free_trial: created.free_trial,
+    awaiting_payment: 'payment_required' in created,
+    payment_required: 'payment_required' in created ? created.payment_required : null,
+  };
 }
 
 export async function listCohorts(orgId: string, courseId: string) {
@@ -102,7 +108,7 @@ export async function listOrgCohorts(orgId: string) {
   return db
     .selectFrom('cohorts')
     .innerJoin('courses', 'courses.id', 'cohorts.course_id')
-    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.created_at', 'courses.id as course_id', 'courses.name as course_name'])
+    .select(['cohorts.id', 'cohorts.name', 'cohorts.status', 'cohorts.awaiting_payment', 'cohorts.created_at', 'courses.id as course_id', 'courses.name as course_name'])
     .where('courses.org_id', '=', orgId)
     .where('courses.deleted_at', 'is', null)
     .where('cohorts.deleted_at', 'is', null)
@@ -149,9 +155,13 @@ export async function getCohort(orgId: string, cohortId: string) {
   const { tier } = await getOrgPlan(orgId);
   const plan = { tier_id: tier.tier_id, name: tier.display_name, features: tier.features, assessment_fee_per_learner_ngn: tier.assessment_fee_per_learner_ngn };
 
+  // Per-cohort orgs: the fee that opens this cohort, if still unpaid.
+  const payment = cohort.awaiting_payment ? await cohortPaymentInvoice(cohortId) : undefined;
+
   return {
     ...cohort,
     plan,
+    payment_invoice: payment ? { id: payment.id, invoice_number: payment.invoice_number, total_ngn: Number(payment.total_ngn) } : null,
     total_enrolled: Number(enrolled.count),
     pre_completed: Number(preCompleted.count),
     post_completed: Number(postCompleted.count),

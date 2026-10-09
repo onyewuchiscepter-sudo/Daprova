@@ -112,6 +112,8 @@ export async function loadOrgBilling(orgId: string) {
       'pending_tier',
       'tier_locked',
       'tier_locked_until',
+      'chosen_tier',
+      'pending_billing_frequency',
     ])
     .where('id', '=', orgId)
     .executeTakeFirst();

@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { env } from '../env.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { activeProvider, providerFor } from './payments/index.js';
+import { applyMissedInvoiceActions, applyPaidInvoice } from './billing/index.js';
 
 // Paying invoices (Pricing & Billing Spec §6) through Paystack, Flutterwave
 // or the test stub. A payment is one checkout attempt for one invoice; the
@@ -12,6 +13,11 @@ import { activeProvider, providerFor } from './payments/index.js';
 // A checkout nobody finishes is dropped after this long (the invoice stays
 // open and can be paid again).
 const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function openCohortId(onPaid: unknown): string | null {
+  const action = (typeof onPaid === 'string' ? JSON.parse(onPaid) : onPaid) as { type?: string; cohort_id?: string } | null;
+  return action?.type === 'open_cohort' && action.cohort_id ? action.cohort_id : null;
+}
 
 // Idempotent: while a checkout for the invoice is still open, the same
 // checkout URL is returned instead of opening a second one.
@@ -50,7 +56,10 @@ export async function startInvoicePayment(orgId: string, invoiceId: string) {
       amountNaira: amount,
       email: org.contact_email,
       description: `${org.name}: Daprova invoice ${invoice.invoice_number}`,
-      callbackUrl: `${env.adminDashboardOrigin}/billing?payment=${reference}`,
+      // A cohort's fee returns to that cohort; everything else to Billing.
+      callbackUrl: openCohortId(invoice.on_paid)
+        ? `${env.adminDashboardOrigin}/cohorts/${openCohortId(invoice.on_paid)}?payment=${reference}`
+        : `${env.adminDashboardOrigin}/billing?payment=${reference}`,
       metadata: { org_id: orgId, invoice_id: invoiceId, invoice_number: invoice.invoice_number },
     }));
   } catch (err) {
@@ -73,9 +82,10 @@ async function markUnsuccessful(paymentId: string, status: 'failed' | 'abandoned
 }
 
 // The status guard makes a second delivery (webhook + reconciliation, or a
-// retried webhook) a no-op.
+// retried webhook) a no-op. Paying an invoice may also start a plan or open a
+// cohort (its on_paid action); if that fails here, reconciliation retries it.
 async function markConfirmed(paymentId: string, providerTransactionId?: string) {
-  return db.transaction().execute(async (trx) => {
+  const payment = await db.transaction().execute(async (trx) => {
     const payment = await trx
       .updateTable('payments')
       .set({ status: 'confirmed', paid_at: sql`now()`, provider_transaction_id: providerTransactionId ?? null })
@@ -94,6 +104,10 @@ async function markConfirmed(paymentId: string, providerTransactionId?: string) 
     }
     return payment;
   });
+  if (payment?.invoice_id) {
+    await applyPaidInvoice(payment.invoice_id).catch((err) => console.error(`[payments] applying invoice ${payment.invoice_id} failed:`, (err as Error).message));
+  }
+  return payment;
 }
 
 // The one place a payment's outcome is decided: always by asking the
@@ -156,7 +170,7 @@ export async function getStubCheckoutInfo(reference: string) {
 // docs/org-onboarding-spec.md §5.6 step 6 — poll the provider for pending
 // payments rather than relying only on webhooks, and expire abandoned
 // checkouts. One bad payment is logged and skipped.
-export async function reconcilePendingPayments(): Promise<{ checked: number; resolved: number; errors: number }> {
+export async function reconcilePendingPayments(): Promise<{ checked: number; resolved: number; errors: number; actions_applied: number }> {
   const pending = await db.selectFrom('payments').select(['reference']).where('status', '=', 'pending').execute();
   let resolved = 0;
   let errors = 0;
@@ -169,5 +183,8 @@ export async function reconcilePendingPayments(): Promise<{ checked: number; res
       console.error(`[payment-reconciliation] ${p.reference} failed:`, (err as Error).message);
     }
   }
-  return { checked: pending.length, resolved, errors };
+  // Paid invoices whose plan or cohort change didn't apply (e.g. a failure
+  // right after the payment was confirmed).
+  const actionsApplied = await applyMissedInvoiceActions();
+  return { checked: pending.length, resolved, errors, actions_applied: actionsApplied };
 }

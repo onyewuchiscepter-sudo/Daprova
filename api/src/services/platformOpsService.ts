@@ -9,6 +9,7 @@ import { emailConfigured, escapeHtml, sendEmails } from '../lib/messaging.js';
 import { inviteMember } from './orgTeamService.js';
 import { BLOCK_AFTER_OVERDUE_DAYS } from './billing/invoices.js';
 import { loadOrgBilling, orgTier } from './billing/plan.js';
+import { applyPaidInvoice } from './billing/selfServe.js';
 
 // The platform console's operational tools: revenue overview, invoices
 // across every org, platform staff, the activity log, discounts/credits,
@@ -219,6 +220,7 @@ export async function discountInvoice(actorPersonId: string, invoiceId: string, 
     .executeTakeFirst();
   if (!updated) throw conflict('The invoice changed while you were editing it — reload and try again.');
   await abandonOpenCheckouts(invoiceId, 'Invoice amount changed');
+  if (updated.status === 'paid') await applyPaidInvoice(invoiceId);
   await writeAuditLog({ actorPersonId, actorContext: 'platform_admin', orgId: invoice.org_id, action: 'invoice_discounted', details: { invoice_id: invoiceId, invoice_number: invoice.invoice_number, amount, reason, new_total: newTotal } });
   return updated;
 }

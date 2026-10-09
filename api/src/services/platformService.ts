@@ -4,7 +4,7 @@ import { db } from '../db/index.js';
 import { firebaseAuth } from '../lib/firebaseAdmin.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { writeAuditLog } from '../lib/auditLog.js';
-import { billingSummary, createInvoice, listInvoices, markInvoicePaid, runBillingCycle } from './billing/index.js';
+import { applyPaidInvoice, billingSummary, createInvoice, listInvoices, markInvoicePaid, proratedMonthlyDifference, runBillingCycle } from './billing/index.js';
 import { loadOrgBilling, orgTier, TIER_ORDER } from './billing/plan.js';
 import { emailConfigured, escapeHtml, sendEmails } from '../lib/messaging.js';
 import { env } from '../env.js';
@@ -348,12 +348,8 @@ export async function setOrgPricing(
     if (oldFee === null || newFee === null || newFee <= oldFee) {
       throw badRequest('The plan was changed, but no difference was billed: the new base fee is not higher than the old one.');
     }
-    const periodEnd = new Date(periodStart);
-    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
     const now = new Date();
-    const fraction = Math.max(0, Math.min(1, (periodEnd.getTime() - now.getTime()) / (periodEnd.getTime() - periodStart.getTime())));
-    const days = Math.ceil((periodEnd.getTime() - now.getTime()) / 86400000);
-    const amount = Math.round((newFee - oldFee) * fraction);
+    const { amount, days, periodEnd } = proratedMonthlyDifference(after, oldFee, newFee, now)!;
     if (amount > 0) {
       const inv = await createInvoice({
         org: after,
@@ -418,6 +414,8 @@ export async function settleInvoice(actorPersonId: string, invoiceId: string, ac
   if (action === 'mark_paid') {
     updated = await markInvoicePaid(invoiceId, note);
     if (!updated) throw badRequest(`Invoice is ${invoice.status}, not awaiting payment`);
+    // Paid offline: still starts the plan or opens the cohort it was for.
+    await applyPaidInvoice(invoiceId);
   } else {
     if (invoice.status === 'paid') throw badRequest('A paid invoice cannot be voided');
     updated = await db.updateTable('invoices').set({ status: 'void', notes: note }).where('id', '=', invoiceId).returningAll().executeTakeFirstOrThrow();

@@ -174,8 +174,10 @@ export default function CourseDetailPage() {
 
   const createCohortMutation = useMutation({
     mutationFn: () => apiFetch(`/api/v1/courses/${id}/cohorts`, { method: 'POST', body: JSON.stringify({ name: cohortName }) }),
-    onSuccess: () => {
+    onSuccess: (created: { id: string; payment_required: unknown }) => {
       setCohortName('');
+      // Per-cohort billing: go straight to the cohort, where its fee is paid.
+      if (created.payment_required) navigate(`/cohorts/${created.id}`);
       return queryClient.invalidateQueries({ queryKey: ['cohorts', id] });
     },
   });

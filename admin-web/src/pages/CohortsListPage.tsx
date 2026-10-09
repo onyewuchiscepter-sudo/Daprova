@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiFetch } from '../api';
 import { Banner, EmptyState, LinkButton, PageHeader } from '../components/ui';
 
-type CohortRow = { id: string; name: string; status: string; created_at: string; course_id: string; course_name: string };
+type CohortRow = { id: string; name: string; status: string; awaiting_payment: boolean; created_at: string; course_id: string; course_name: string };
 
 // Every cohort across all courses. Cohorts are still created from a course's
 // page (a cohort always belongs to one course), so this is a way in, not a
@@ -41,7 +41,11 @@ export default function CohortsListPage() {
                 <p className="font-medium text-ink truncate">{c.name}</p>
                 <p className="font-mono text-[11px] text-sage mt-0.5 truncate">{c.course_name}</p>
               </div>
-              <span className="text-xs bg-ground rounded px-2 py-1 capitalize shrink-0">{c.status}</span>
+              {c.awaiting_payment ? (
+                <span className="text-xs bg-amber-wash text-amber rounded px-2 py-1 shrink-0">Awaiting payment</span>
+              ) : (
+                <span className="text-xs bg-ground rounded px-2 py-1 capitalize shrink-0">{c.status}</span>
+              )}
             </Link>
           </li>
         ))}

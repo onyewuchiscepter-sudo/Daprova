@@ -3,6 +3,7 @@ import { blockingInvoice, BLOCK_AFTER_OVERDUE_DAYS } from './invoices.js';
 import { AUTO_FINALIZE_AFTER_DAYS } from './lifecycle.js';
 import { FREE_TRIAL_LEARNERS, determineTier, loadOrgBilling, orgTier, tiersForVersion, trailingStudents, ENTERPRISE_THRESHOLD, isTierLocked } from './plan.js';
 import { quotaStatus } from './quota.js';
+import { floorTier } from './selfServe.js';
 
 // Everything the org's Billing page shows, in one call.
 export async function billingSummary(orgId: string) {
@@ -13,7 +14,7 @@ export async function billingSummary(orgId: string) {
   const openCohorts = await db
     .selectFrom('cohorts')
     .innerJoin('courses', 'courses.id', 'cohorts.course_id')
-    .select(['cohorts.id', 'cohorts.name', 'cohorts.is_free_trial', 'cohorts.status'])
+    .select(['cohorts.id', 'cohorts.name', 'cohorts.is_free_trial', 'cohorts.status', 'cohorts.awaiting_payment'])
     .where('courses.org_id', '=', orgId)
     .where('cohorts.deleted_at', 'is', null)
     .where('cohorts.finalized_at', 'is', null)
@@ -25,6 +26,8 @@ export async function billingSummary(orgId: string) {
     .where('org_id', '=', orgId)
     .where('status', 'in', ['pending', 'overdue'])
     .where('deleted_at', 'is', null)
+    // Plan offers and cohort fees aren't debts until the admin chooses to pay.
+    .where('on_paid', 'is', null)
     .executeTakeFirstOrThrow();
 
   const byVolume = determineTier(trailing);
@@ -39,11 +42,20 @@ export async function billingSummary(orgId: string) {
     tier,
     tier_effective_date: org.tier_effective_date,
     pending_tier: isTierLocked(org) ? null : org.pending_tier,
+    // Self-serve (selfServe.ts): the plan the org picked, which volume can
+    // raise but not lower, and a frequency switch waiting for renewal.
+    chosen_tier: org.chosen_tier,
+    pending_billing_frequency: org.pending_billing_frequency,
+    // Whether the admin can change plan here, or must talk to Daprova.
+    self_serve: org.is_enterprise_custom || org.pricing_tier === 'enterprise' || org.billing_status === 'pending_manual_quote' ? 'contact_sales' : isTierLocked(org) ? 'locked' : 'available',
+    awaiting_payment_cohorts: openCohorts.filter((c) => c.awaiting_payment).map((c) => ({ id: c.id, name: c.name })),
     // Set by Daprova rather than by volume (see isTierLocked).
     tier_lock: isTierLocked(org) ? { until: org.tier_locked_until } : null,
     volume: {
       trailing_12_months: trailing,
       tier_by_volume: byVolume,
+      // Where volume takes them at the next cycle, never below a chosen plan.
+      tier_next_cycle: floorTier(byVolume, org.chosen_tier),
       band_min: tier.students_per_year_min,
       band_max: tier.students_per_year_max,
       projected: org.projected_students_per_year,

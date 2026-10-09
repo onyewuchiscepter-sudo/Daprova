@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch, resolveApiUrl } from '../api';
-import { Banner, PageHeader } from '../components/ui';
+import { Banner, Button, PageHeader } from '../components/ui';
 import { TIER_LABEL } from '../components/UpgradePrompt';
 
 type Features = {
@@ -39,7 +39,7 @@ type Summary = {
   tier_effective_date: string;
   pending_tier: string | null;
   tier_lock: { until: string | null } | null;
-  volume: { trailing_12_months: number; tier_by_volume: string; band_min: number; band_max: number | null; projected: number | null; enterprise_threshold: number };
+  volume: { trailing_12_months: number; tier_by_volume: string; tier_next_cycle: string; band_min: number; band_max: number | null; projected: number | null; enterprise_threshold: number };
   cohorts: { open: number; limit: number | null; auto_finalize_after_days: number };
   trial: { active: boolean; free_cohorts_remaining: number; free_learners: number; trial_cohort: { id: string; name: string } | null };
   next_base_invoice: { date: string | null; amount_ngn: number | null; basis: string } | null;
@@ -47,7 +47,13 @@ type Summary = {
   outstanding: { count: number; total_ngn: number };
   blocked: { invoice_id: string; invoice_number: string; after_days: number } | null;
   tiers: Tier[];
+  chosen_tier: string | null;
+  pending_billing_frequency: 'monthly' | 'per_cohort_cycle' | null;
+  self_serve: 'available' | 'locked' | 'contact_sales';
+  awaiting_payment_cohorts: Array<{ id: string; name: string }>;
 };
+type Frequency = 'monthly' | 'per_cohort_cycle';
+type Quote = { summary: string; charge_ngn: number };
 type Line = { category: string; description: string; quantity: number; unit_ngn: number; amount_ngn: number };
 type Invoice = {
   id: string;
@@ -63,6 +69,7 @@ type Invoice = {
   due_date: string;
   paid_at: string | null;
   notes: string | null;
+  on_paid: { type: 'start_plan' | 'upgrade_plan' | 'open_cohort'; tier?: string } | null;
   created_at: string;
 };
 
@@ -164,7 +171,21 @@ export default function BillingPage() {
       {s.trial.active && (
         <Banner tone="gain">
           Free trial: your first cohort{s.trial.trial_cohort ? ` (${s.trial.trial_cohort.name})` : ''} is free — no base fee, and assessments for up to {s.trial.free_learners}{' '}
-          learners are included. Billing starts when you finalise it or start a second cohort.
+          learners are included. Billing starts when you finalise it or start a second cohort, or choose a plan below to start now.
+        </Banner>
+      )}
+      {s.awaiting_payment_cohorts.length > 0 && (
+        <Banner tone="amber">
+          Waiting for payment before learners can start:{' '}
+          {s.awaiting_payment_cohorts.map((c, i) => (
+            <span key={c.id}>
+              {i > 0 && ', '}
+              <Link to={`/cohorts/${c.id}`} className="underline">
+                {c.name}
+              </Link>
+            </span>
+          ))}
+          . Pay its cohort fee below or from the cohort page.
         </Banner>
       )}
 
@@ -231,6 +252,8 @@ export default function BillingPage() {
         </div>
       </div>
 
+      <ChoosePlan s={s} onDone={(text) => setNotice({ tone: 'gain', text })} onError={(text) => setNotice({ tone: 'flag', text })} />
+
       <div className="bg-paper rounded-lg border border-rule p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="font-display font-semibold text-[16px] text-ink">Learners assessed in the last 12 months</h3>
@@ -253,16 +276,18 @@ export default function BillingPage() {
           </p>
         ) : (
           <p className="text-sm text-ink-soft mt-3">
-            Your plan follows your yearly volume and changes automatically at the start of a billing cycle — never backdated.
+            {s.chosen_tier
+              ? `You chose ${TIER_LABEL[s.chosen_tier] ?? s.chosen_tier}. If your yearly volume outgrows it, you move up automatically at the start of a billing cycle, never below the plan you chose.`
+              : 'Your plan follows your yearly volume and changes automatically at the start of a billing cycle — never backdated.'}
             {s.pending_tier && ` Based on your recent volume you'll move to ${TIER_LABEL[s.pending_tier] ?? s.pending_tier} at the next renewal.`}
-            {!s.pending_tier && s.volume.tier_by_volume !== t.tier_id && ` Your recent volume fits ${TIER_LABEL[s.volume.tier_by_volume]}; that applies from your next cycle.`}
+            {!s.pending_tier && s.volume.tier_next_cycle !== t.tier_id && ` Your recent volume fits ${TIER_LABEL[s.volume.tier_next_cycle]}; that applies from your next cycle.`}
             {nextTier && !nextTier.requires_custom_quote && ` ${nextTier.display_name} starts at ${nextTier.students_per_year_min.toLocaleString()} learners a year.`}
             {` Programmes of ${s.volume.enterprise_threshold.toLocaleString()}+ learners a year are on Enterprise (contact sales).`}
           </p>
         )}
       </div>
 
-      <div className="bg-paper rounded-lg border border-rule overflow-hidden">
+      <div className="bg-paper rounded-lg border border-rule overflow-x-auto">
         <div className="flex items-baseline justify-between px-5 pt-4 pb-2">
           <h3 className="font-display font-semibold text-[16px] text-ink">Invoices</h3>
           {s.outstanding.count > 0 && (
@@ -271,7 +296,7 @@ export default function BillingPage() {
             </span>
           )}
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-ground text-left text-ink-soft">
             <tr>
               <th className="p-3">Invoice</th>
@@ -380,7 +405,13 @@ function InvoiceRow({ inv, open, onToggle, onPay, paying }: { inv: Invoice; open
           <div className="text-xs text-sage">{date(inv.created_at)}</div>
         </td>
         <td className="p-3">
-          {KIND[inv.kind] ?? inv.kind}
+          {inv.on_paid?.type === 'open_cohort'
+            ? 'Cohort fee (opens the cohort)'
+            : inv.on_paid?.type === 'start_plan'
+              ? `${TIER_LABEL[inv.on_paid.tier ?? ''] ?? 'Plan'}: first month`
+              : inv.on_paid?.type === 'upgrade_plan'
+                ? `Upgrade to ${TIER_LABEL[inv.on_paid.tier ?? ''] ?? 'a new plan'}`
+                : (KIND[inv.kind] ?? inv.kind)}
           {inv.cohort_name && <div className="text-xs text-sage">{inv.cohort_name}</div>}
         </td>
         <td className="p-3 text-right font-mono">{naira(inv.total_ngn)}</td>
@@ -420,5 +451,140 @@ function InvoiceRow({ inv, open, onToggle, onPay, paying }: { inv: Invoice; open
         </tr>
       )}
     </>
+  );
+}
+
+// Self-serve plan choice: pick a plan and how to be billed, see exactly what
+// happens and what it costs, then confirm (or pay, when something is due now).
+function ChoosePlan({ s, onDone, onError }: { s: Summary; onDone: (text: string) => void; onError: (text: string) => void }) {
+  const queryClient = useQueryClient();
+  const selfServe = s.tiers.filter((x) => !x.requires_custom_quote && x.base_fee_monthly_ngn !== null);
+  const [tier, setTier] = useState(s.chosen_tier ?? s.tier.tier_id);
+  const [freq, setFreq] = useState<Frequency>(s.pending_billing_frequency ?? s.billing_frequency);
+  const order = s.tiers.map((x) => x.tier_id);
+  const minIndex = order.indexOf(s.volume.tier_by_volume);
+  const nothingScheduled = !s.pending_billing_frequency && (!s.chosen_tier || s.chosen_tier === s.tier.tier_id);
+  const isCurrent = !s.trial.active && tier === s.tier.tier_id && freq === s.billing_frequency && nothingScheduled;
+  const isScheduled = !s.trial.active && tier === (s.chosen_tier ?? s.tier.tier_id) && freq === (s.pending_billing_frequency ?? s.billing_frequency) && !nothingScheduled;
+
+  const quote = useQuery<Quote, Error>({
+    queryKey: ['plan-quote', tier, freq],
+    queryFn: () => apiFetch(`/api/v1/billing/plan/quote?tier=${tier}&billing_frequency=${freq}`),
+    enabled: s.self_serve === 'available' && !isCurrent && !isScheduled,
+    retry: false,
+  });
+
+  const confirm = useMutation({
+    mutationFn: () => apiFetch('/api/v1/billing/plan', { method: 'POST', body: JSON.stringify({ tier, billing_frequency: freq }) }),
+    onSuccess: (r: { applied: boolean; summary: string; checkoutUrl?: string }) => {
+      if (!r.applied && r.checkoutUrl) {
+        window.location.assign(resolveApiUrl(r.checkoutUrl));
+        return;
+      }
+      queryClient.invalidateQueries();
+      onDone(`Done. ${r.summary}`);
+    },
+    onError: (err: Error) => onError(err.message),
+  });
+
+  if (s.self_serve === 'locked') return null;
+  if (s.self_serve === 'contact_sales') {
+    return (
+      <div className="bg-paper rounded-lg border border-rule p-5">
+        <h3 className="font-display font-semibold text-[16px] text-ink">Change your plan</h3>
+        <p className="text-sm text-ink-soft mt-2">Your plan is arranged with the Daprova team. Reply to any Daprova email or contact us to change it.</p>
+      </div>
+    );
+  }
+
+  const fee = (x: Tier) => (freq === 'monthly' ? x.base_fee_monthly_ngn : x.base_fee_per_cohort_cycle_ngn);
+  const scheduledText = [
+    s.chosen_tier && s.chosen_tier !== s.tier.tier_id ? `you move to ${TIER_LABEL[s.chosen_tier] ?? s.chosen_tier}` : null,
+    s.pending_billing_frequency ? `you switch to ${s.pending_billing_frequency === 'monthly' ? 'monthly' : 'per-cohort'} billing` : null,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+
+  return (
+    <div className="bg-paper rounded-lg border border-rule p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-display font-semibold text-[16px] text-ink">{s.trial.active ? 'Choose a plan' : 'Change your plan'}</h3>
+        <div role="radiogroup" aria-label="Billing frequency" className="inline-flex rounded border border-rule overflow-hidden text-sm">
+          {(['monthly', 'per_cohort_cycle'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="radio"
+              aria-checked={freq === f}
+              onClick={() => setFreq(f)}
+              className={`px-3 py-1.5 ${freq === f ? 'bg-ink text-paper' : 'text-ink-soft hover:text-ink'}`}
+            >
+              {f === 'monthly' ? 'Pay monthly' : 'Pay per cohort'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-sage mt-1">
+        {freq === 'monthly'
+          ? "One base fee each month, however many cohorts you run (up to your plan's limit)."
+          : 'A base fee for each cohort, paid when you create it, before it opens to learners. Suits programmes that run a cohort or two a year.'}
+      </p>
+
+      <div role="radiogroup" aria-label="Plan" className="grid sm:grid-cols-3 gap-3 mt-4">
+        {selfServe.map((x) => {
+          const tooSmall = order.indexOf(x.tier_id) < minIndex;
+          const selected = tier === x.tier_id;
+          return (
+            <button
+              key={x.tier_id}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              disabled={tooSmall}
+              onClick={() => setTier(x.tier_id)}
+              className={`text-left rounded-lg border p-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                selected ? 'border-gain ring-1 ring-gain' : 'border-rule hover:border-ink'
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-semibold text-ink">{x.display_name}</span>
+                {x.tier_id === s.tier.tier_id && <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gain">Current</span>}
+              </div>
+              <p className="font-mono text-[18px] text-ink mt-1">
+                {naira(fee(x))}
+                <span className="text-xs text-ink-soft"> / {freq === 'monthly' ? 'month' : 'cohort'}</span>
+              </p>
+              <p className="text-xs text-ink-soft mt-1">
+                {x.concurrent_cohorts_limit === null ? 'Unlimited cohorts at a time' : `${x.concurrent_cohorts_limit} cohort${x.concurrent_cohorts_limit === 1 ? '' : 's'} at a time`} ·{' '}
+                {naira(x.assessment_fee_per_learner_ngn)} per learner assessed
+              </p>
+              {tooSmall && <p className="text-xs text-flag mt-1">Your learner numbers need a bigger plan.</p>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-sage mt-2">
+        Full feature comparison is under "All plans" below. Programmes of {s.volume.enterprise_threshold.toLocaleString()}+ learners a year: contact sales for Enterprise.
+      </p>
+
+      <div className="mt-4 border-t border-rule pt-4">
+        {isCurrent ? (
+          <p className="text-sm text-ink-soft">This is your current plan. Pick a different plan or way to pay to see what would change.</p>
+        ) : isScheduled ? (
+          <p className="text-sm text-ink-soft">Already scheduled: at your next renewal {scheduledText}. Pick your current plan to cancel it.</p>
+        ) : quote.isLoading ? (
+          <p className="text-sm text-ink-soft">Working out the cost…</p>
+        ) : quote.error ? (
+          <p className="text-sm text-ink-soft">{quote.error.message}</p>
+        ) : quote.data ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink max-w-2xl">{quote.data.summary}</p>
+            <Button onClick={() => confirm.mutate()} disabled={confirm.isPending}>
+              {confirm.isPending ? 'Working…' : quote.data.charge_ngn > 0 ? `Pay ${naira(quote.data.charge_ngn)}` : 'Confirm'}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

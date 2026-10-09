@@ -4,3 +4,13 @@ export { assertCanCreateCohort, onCohortCreated, finalizeCohort, finalizePreview
 export { assertNotBlocked, listInvoices, getInvoice, markInvoicePaid, createInvoice } from './invoices.js';
 export { quotaStatus, recordReportUsage } from './quota.js';
 export { billingSummary } from './summary.js';
+export {
+  quotePlanChange,
+  changePlan,
+  applyPaidInvoice,
+  applyMissedInvoiceActions,
+  cancelUnpaidCohort,
+  cohortPaymentInvoice,
+  proratedMonthlyDifference,
+  type InvoiceAction,
+} from './selfServe.js';

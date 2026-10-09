@@ -41,6 +41,8 @@ export interface OrganisationsTable {
   credit_ngn: Generated<string>;
   tier_locked: Generated<boolean>;
   tier_locked_until: Timestamp | null;
+  chosen_tier: string | null; // the plan the org picked: a floor for volume changes
+  pending_billing_frequency: string | null; // applied at the next renewal
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -150,6 +152,7 @@ export interface CohortsTable {
   deleted_at: Timestamp | null;
   tracer_link_token: Generated<string>;
   finalized_at: Timestamp | null;
+  awaiting_payment: Generated<boolean>; // closed to learners until its cycle fee is paid
 }
 
 export interface LearnersTable {
@@ -392,6 +395,8 @@ export interface InvoicesTable {
   paid_at: Timestamp | null;
   notes: string | null;
   created_at: Generated<Timestamp>;
+  on_paid: unknown | null; // InvoiceAction: applied once when the invoice is paid
+  on_paid_applied_at: Timestamp | null;
   deleted_at: Timestamp | null;
 }
 

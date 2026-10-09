@@ -8,6 +8,7 @@ import { useAuth } from '../auth';
 import RemindersPanel from '../components/RemindersPanel';
 import SharePanel from '../components/SharePanel';
 import OutcomesPanel from '../components/OutcomesPanel';
+import CohortPayment from '../components/CohortPayment';
 
 type Cohort = {
   id: string;
@@ -23,6 +24,8 @@ type Cohort = {
   is_free_trial: boolean;
   finalized_at: string | null;
   end_date: string | null;
+  awaiting_payment: boolean;
+  payment_invoice: { id: string; invoice_number: string; total_ngn: number } | null;
   plan: {
     tier_id: string;
     name: string;
@@ -279,7 +282,9 @@ export default function CohortDashboardPage() {
         <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-sage">{cohort.plan.name} plan</span>
       </p>
 
-      {cohort.finalized_at ? (
+      <CohortPayment cohortId={cohort.id} awaitingPayment={cohort.awaiting_payment} invoice={cohort.payment_invoice} isAdmin={isAdmin} />
+
+      {cohort.awaiting_payment ? null : cohort.finalized_at ? (
         <div className="mb-6 rounded-md px-4 py-3 text-sm bg-ground text-ink-soft border border-rule">
           This cohort was finalised on {new Date(cohort.finalized_at).toLocaleDateString()}. Its results, reports and certificates stay available; new
           assessments are closed.
