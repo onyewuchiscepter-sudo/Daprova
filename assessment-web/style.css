@@ -205,12 +205,14 @@ textarea {
 }
 
 .nps-row {
-  flex-wrap: wrap;
+  /* 0-10 in an even 6 + 5 grid: eleven across is too small to tap in the
+     480px column. */
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
 }
 
 .nps-row button {
-  flex: 1 1 14%;
-  padding: 10px 0;
+  padding: 13px 0;
   font-size: 0.85rem;
 }
 
@@ -247,6 +249,7 @@ textarea {
 }
 
 .score-row span:last-child {
+  white-space: nowrap;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
